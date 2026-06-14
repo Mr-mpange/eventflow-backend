@@ -1,0 +1,87 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: eventflow-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: eventflow
+      POSTGRES_PASSWORD: eventflow_secret
+      POSTGRES_DB: eventflow
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U eventflow -d eventflow"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: eventflow-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  api:
+    build:
+      context: .
+      target: development
+    container_name: eventflow-api
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      NODE_ENV: development
+      PORT: 3000
+      DATABASE_URL: postgresql://eventflow:eventflow_secret@postgres:5432/eventflow?schema=public
+      REDIS_URL: redis://redis:6379
+      JWT_ACCESS_SECRET: dev-access-secret-min-32-chars-long!!
+      JWT_REFRESH_SECRET: dev-refresh-secret-min-32-chars-long!!
+      APP_URL: http://localhost:3000
+      FRONTEND_URL: http://localhost:5173
+    volumes:
+      - .:/app
+      - /app/node_modules
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    command: sh -c "npx prisma migrate dev --name init && npm run dev"
+
+  worker:
+    build:
+      context: .
+      target: development
+    container_name: eventflow-worker
+    restart: unless-stopped
+    environment:
+      NODE_ENV: development
+      DATABASE_URL: postgresql://eventflow:eventflow_secret@postgres:5432/eventflow?schema=public
+      REDIS_URL: redis://redis:6379
+      JWT_ACCESS_SECRET: dev-access-secret-min-32-chars-long!!
+      JWT_REFRESH_SECRET: dev-refresh-secret-min-32-chars-long!!
+      APP_URL: http://localhost:3000
+      FRONTEND_URL: http://localhost:5173
+    volumes:
+      - .:/app
+      - /app/node_modules
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    command: npm run worker
+
+volumes:
+  postgres_data:
+  redis_data:

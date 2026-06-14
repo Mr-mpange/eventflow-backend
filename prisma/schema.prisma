@@ -1,0 +1,533 @@
+// EventFlow - Complete Database Schema
+// Wedding & Event Invitation Management Platform
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ============================================================
+// ENUMS
+// ============================================================
+
+enum Role {
+  SUPER_ADMIN
+  ADMIN
+  EVENT_ORGANIZER
+  STAFF
+}
+
+enum EventStatus {
+  DRAFT
+  PUBLISHED
+  ACTIVE
+  COMPLETED
+  CANCELLED
+}
+
+enum InvitationStatus {
+  DRAFT
+  PUBLISHED
+  ARCHIVED
+}
+
+enum RsvpStatus {
+  PENDING
+  ACCEPTED
+  DECLINED
+  MAYBE
+}
+
+enum MessageStatus {
+  QUEUED
+  SENT
+  DELIVERED
+  READ
+  FAILED
+}
+
+enum SubscriptionPlan {
+  FREE
+  BASIC
+  PREMIUM
+  ENTERPRISE
+}
+
+enum SubscriptionStatus {
+  ACTIVE
+  CANCELLED
+  PAST_DUE
+  TRIALING
+  EXPIRED
+}
+
+enum InvoiceStatus {
+  DRAFT
+  OPEN
+  PAID
+  VOID
+  UNCOLLECTIBLE
+}
+
+enum AuditAction {
+  CREATE
+  UPDATE
+  DELETE
+  LOGIN
+  LOGOUT
+  EXPORT
+  IMPORT
+  SEND
+  CHECK_IN
+}
+
+// ============================================================
+// AUTH & USERS
+// ============================================================
+
+model User {
+  id                String    @id @default(uuid())
+  email             String    @unique
+  passwordHash      String    @map("password_hash")
+  firstName         String    @map("first_name")
+  lastName          String    @map("last_name")
+  phone             String?
+  avatarUrl         String?   @map("avatar_url")
+  role              Role      @default(EVENT_ORGANIZER)
+  isEmailVerified   Boolean   @default(false) @map("is_email_verified")
+  emailVerifiedAt   DateTime? @map("email_verified_at")
+  lastLoginAt       DateTime? @map("last_login_at")
+  organizationId    String?   @map("organization_id")
+  deletedAt         DateTime? @map("deleted_at")
+  createdAt         DateTime  @default(now()) @map("created_at")
+  updatedAt         DateTime  @updatedAt @map("updated_at")
+
+  organization      Organization?  @relation(fields: [organizationId], references: [id])
+  refreshTokens     RefreshToken[]
+  passwordResets    PasswordReset[]
+  emailVerifications EmailVerification[]
+  events            Event[]
+  auditLogs         AuditLog[]
+  checkIns          AttendanceLog[] @relation("CheckedInBy")
+
+  @@index([email])
+  @@index([organizationId])
+  @@index([role])
+  @@index([deletedAt])
+  @@map("users")
+}
+
+model RefreshToken {
+  id          String    @id @default(uuid())
+  token       String    @unique
+  userId      String    @map("user_id")
+  expiresAt   DateTime  @map("expires_at")
+  revokedAt   DateTime? @map("revoked_at")
+  userAgent   String?   @map("user_agent")
+  ipAddress   String?   @map("ip_address")
+  createdAt   DateTime  @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([token])
+  @@index([expiresAt])
+  @@map("refresh_tokens")
+}
+
+model PasswordReset {
+  id        String    @id @default(uuid())
+  userId    String    @map("user_id")
+  token     String    @unique
+  expiresAt DateTime  @map("expires_at")
+  usedAt    DateTime? @map("used_at")
+  createdAt DateTime  @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([token])
+  @@map("password_resets")
+}
+
+model EmailVerification {
+  id        String    @id @default(uuid())
+  userId    String    @map("user_id")
+  token     String    @unique
+  expiresAt DateTime  @map("expires_at")
+  usedAt    DateTime? @map("used_at")
+  createdAt DateTime  @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([token])
+  @@map("email_verifications")
+}
+
+// ============================================================
+// ORGANIZATION
+// ============================================================
+
+model Organization {
+  id          String    @id @default(uuid())
+  name        String
+  slug        String    @unique
+  logoUrl     String?   @map("logo_url")
+  website     String?
+  address     String?
+  phone       String?
+  deletedAt   DateTime? @map("deleted_at")
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+
+  users         User[]
+  events        Event[]
+  subscriptions Subscription[]
+
+  @@index([slug])
+  @@index([deletedAt])
+  @@map("organizations")
+}
+
+// ============================================================
+// EVENTS
+// ============================================================
+
+model EventCategory {
+  id          String    @id @default(uuid())
+  name        String    @unique
+  slug        String    @unique
+  description String?
+  icon        String?
+  deletedAt   DateTime? @map("deleted_at")
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+
+  events Event[]
+
+  @@map("event_categories")
+}
+
+model Event {
+  id            String      @id @default(uuid())
+  title         String
+  description   String?
+  eventDate     DateTime    @map("event_date")
+  endDate       DateTime?   @map("end_date")
+  venue         String?
+  latitude      Float?
+  longitude     Float?
+  status        EventStatus @default(DRAFT)
+  coverImageUrl String?     @map("cover_image_url")
+  settings      Json        @default("{}")
+  categoryId    String?     @map("category_id")
+  organizerId   String      @map("organizer_id")
+  organizationId String?    @map("organization_id")
+  deletedAt     DateTime?   @map("deleted_at")
+  createdAt     DateTime    @default(now()) @map("created_at")
+  updatedAt     DateTime    @updatedAt @map("updated_at")
+
+  category      EventCategory? @relation(fields: [categoryId], references: [id])
+  organizer     User           @relation(fields: [organizerId], references: [id])
+  organization  Organization?  @relation(fields: [organizationId], references: [id])
+  invitations   Invitation[]
+  guests        Guest[]
+  guestGroups   GuestGroup[]
+  campaigns     WhatsAppCampaign[]
+  attendanceLogs AttendanceLog[]
+
+  @@index([organizerId])
+  @@index([organizationId])
+  @@index([categoryId])
+  @@index([status])
+  @@index([eventDate])
+  @@index([deletedAt])
+  @@map("events")
+}
+
+// ============================================================
+// INVITATIONS
+// ============================================================
+
+model InvitationTemplate {
+  id          String    @id @default(uuid())
+  name        String
+  description String?
+  thumbnailUrl String? @map("thumbnail_url")
+  design      Json      @default("{}")
+  isPublic    Boolean   @default(false) @map("is_public")
+  deletedAt   DateTime? @map("deleted_at")
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+
+  invitations Invitation[]
+
+  @@map("invitation_templates")
+}
+
+model Invitation {
+  id          String           @id @default(uuid())
+  eventId     String           @map("event_id")
+  templateId  String?          @map("template_id")
+  title       String
+  content     Json             @default("{}")
+  status      InvitationStatus @default(DRAFT)
+  publishedAt DateTime?        @map("published_at")
+  deletedAt   DateTime?        @map("deleted_at")
+  createdAt   DateTime         @default(now()) @map("created_at")
+  updatedAt   DateTime         @updatedAt @map("updated_at")
+
+  event    Event               @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  template InvitationTemplate? @relation(fields: [templateId], references: [id])
+
+  @@index([eventId])
+  @@index([status])
+  @@index([deletedAt])
+  @@map("invitations")
+}
+
+// ============================================================
+// GUESTS
+// ============================================================
+
+model GuestGroup {
+  id        String    @id @default(uuid())
+  eventId   String    @map("event_id")
+  name      String
+  color     String?
+  deletedAt DateTime? @map("deleted_at")
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+
+  event  Event   @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  guests Guest[]
+
+  @@unique([eventId, name])
+  @@index([eventId])
+  @@map("guest_groups")
+}
+
+model Guest {
+  id          String     @id @default(uuid())
+  eventId     String     @map("event_id")
+  groupId     String?    @map("group_id")
+  fullName    String     @map("full_name")
+  phone       String?
+  email       String?
+  rsvpStatus  RsvpStatus @default(PENDING) @map("rsvp_status")
+  rsvpNote    String?    @map("rsvp_note")
+  rsvpAt      DateTime?  @map("rsvp_at")
+  qrCode      String?    @unique @map("qr_code")
+  qrCodeUrl   String?    @map("qr_code_url")
+  plusOnes    Int        @default(0) @map("plus_ones")
+  isCheckedIn Boolean    @default(false) @map("is_checked_in")
+  checkedInAt DateTime?  @map("checked_in_at")
+  deletedAt   DateTime?  @map("deleted_at")
+  createdAt   DateTime   @default(now()) @map("created_at")
+  updatedAt   DateTime   @updatedAt @map("updated_at")
+
+  event          Event           @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  group          GuestGroup?     @relation(fields: [groupId], references: [id])
+  rsvpResponses  RsvpResponse[]
+  messages       WhatsAppMessage[]
+  attendanceLogs AttendanceLog[]
+
+  @@index([eventId])
+  @@index([groupId])
+  @@index([rsvpStatus])
+  @@index([phone])
+  @@index([email])
+  @@index([qrCode])
+  @@index([deletedAt])
+  @@map("guests")
+}
+
+// ============================================================
+// RSVP
+// ============================================================
+
+model RsvpResponse {
+  id        String     @id @default(uuid())
+  guestId   String     @map("guest_id")
+  status    RsvpStatus
+  note      String?
+  plusOnes  Int        @default(0) @map("plus_ones")
+  ipAddress String?    @map("ip_address")
+  userAgent String?    @map("user_agent")
+  createdAt DateTime   @default(now()) @map("created_at")
+
+  guest Guest @relation(fields: [guestId], references: [id], onDelete: Cascade)
+
+  @@index([guestId])
+  @@index([status])
+  @@index([createdAt])
+  @@map("rsvp_responses")
+}
+
+// ============================================================
+// QR & ATTENDANCE
+// ============================================================
+
+model AttendanceLog {
+  id          String   @id @default(uuid())
+  eventId     String   @map("event_id")
+  guestId     String   @map("guest_id")
+  checkedInBy String?  @map("checked_in_by")
+  method      String   @default("qr_scan")
+  notes       String?
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  event       Event @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  guest       Guest @relation(fields: [guestId], references: [id], onDelete: Cascade)
+  staffMember User? @relation("CheckedInBy", fields: [checkedInBy], references: [id])
+
+  @@index([eventId])
+  @@index([guestId])
+  @@index([createdAt])
+  @@map("attendance_logs")
+}
+
+// ============================================================
+// WHATSAPP
+// ============================================================
+
+model WhatsAppTemplate {
+  id          String    @id @default(uuid())
+  name        String
+  language    String    @default("en")
+  category    String?
+  content     Json      @default("{}")
+  externalId  String?   @map("external_id")
+  isApproved  Boolean   @default(false) @map("is_approved")
+  deletedAt   DateTime? @map("deleted_at")
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+
+  campaigns WhatsAppCampaign[]
+
+  @@map("whatsapp_templates")
+}
+
+model WhatsAppCampaign {
+  id          String    @id @default(uuid())
+  eventId     String    @map("event_id")
+  templateId  String?   @map("template_id")
+  name        String
+  message     String
+  scheduledAt DateTime? @map("scheduled_at")
+  sentAt      DateTime? @map("sent_at")
+  status      String    @default("draft")
+  deletedAt   DateTime? @map("deleted_at")
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+
+  event    Event             @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  template WhatsAppTemplate? @relation(fields: [templateId], references: [id])
+  messages WhatsAppMessage[]
+
+  @@index([eventId])
+  @@index([status])
+  @@index([scheduledAt])
+  @@map("whatsapp_campaigns")
+}
+
+model WhatsAppMessage {
+  id           String        @id @default(uuid())
+  campaignId   String?       @map("campaign_id")
+  guestId      String        @map("guest_id")
+  phone        String
+  message      String
+  status       MessageStatus @default(QUEUED)
+  externalId   String?       @map("external_id")
+  errorMessage String?       @map("error_message")
+  retryCount   Int           @default(0) @map("retry_count")
+  sentAt       DateTime?     @map("sent_at")
+  deliveredAt  DateTime?     @map("delivered_at")
+  readAt       DateTime?     @map("read_at")
+  createdAt    DateTime      @default(now()) @map("created_at")
+  updatedAt    DateTime      @updatedAt @map("updated_at")
+
+  campaign WhatsAppCampaign? @relation(fields: [campaignId], references: [id])
+  guest    Guest             @relation(fields: [guestId], references: [id], onDelete: Cascade)
+
+  @@index([campaignId])
+  @@index([guestId])
+  @@index([status])
+  @@index([phone])
+  @@map("whatsapp_messages")
+}
+
+// ============================================================
+// SUBSCRIPTIONS & BILLING
+// ============================================================
+
+model Subscription {
+  id               String             @id @default(uuid())
+  organizationId   String             @map("organization_id")
+  plan             SubscriptionPlan   @default(FREE)
+  status           SubscriptionStatus @default(ACTIVE)
+  stripeCustomerId String?            @map("stripe_customer_id")
+  stripeSubId      String?            @map("stripe_sub_id")
+  currentPeriodStart DateTime?        @map("current_period_start")
+  currentPeriodEnd   DateTime?        @map("current_period_end")
+  cancelledAt      DateTime?          @map("cancelled_at")
+  createdAt        DateTime           @default(now()) @map("created_at")
+  updatedAt        DateTime           @updatedAt @map("updated_at")
+
+  organization Organization @relation(fields: [organizationId], references: [id])
+  invoices     Invoice[]
+
+  @@index([organizationId])
+  @@index([status])
+  @@map("subscriptions")
+}
+
+model Invoice {
+  id              String        @id @default(uuid())
+  subscriptionId  String        @map("subscription_id")
+  amount          Decimal       @db.Decimal(10, 2)
+  currency        String        @default("USD")
+  status          InvoiceStatus @default(DRAFT)
+  stripeInvoiceId String?       @map("stripe_invoice_id")
+  pdfUrl          String?       @map("pdf_url")
+  paidAt          DateTime?     @map("paid_at")
+  dueDate         DateTime?     @map("due_date")
+  createdAt       DateTime      @default(now()) @map("created_at")
+  updatedAt       DateTime      @updatedAt @map("updated_at")
+
+  subscription Subscription @relation(fields: [subscriptionId], references: [id])
+
+  @@index([subscriptionId])
+  @@index([status])
+  @@map("invoices")
+}
+
+// ============================================================
+// AUDIT
+// ============================================================
+
+model AuditLog {
+  id         String      @id @default(uuid())
+  userId     String?     @map("user_id")
+  action     AuditAction
+  entityType String      @map("entity_type")
+  entityId   String?     @map("entity_id")
+  oldValues  Json?       @map("old_values")
+  newValues  Json?       @map("new_values")
+  ipAddress  String?     @map("ip_address")
+  userAgent  String?     @map("user_agent")
+  createdAt  DateTime    @default(now()) @map("created_at")
+
+  user User? @relation(fields: [userId], references: [id])
+
+  @@index([userId])
+  @@index([entityType, entityId])
+  @@index([action])
+  @@index([createdAt])
+  @@map("audit_logs")
+}
