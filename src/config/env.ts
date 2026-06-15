@@ -28,8 +28,9 @@ const envSchema = z.object({
   CLOUDINARY_API_SECRET: z.string().optional(),
 
   GHALA_RAILS_API_URL: z.string().url().optional(),
-  GHALA_RAILS_API_KEY: z.string().optional(),
-  GHALA_RAILS_PHONE_NUMBER_ID: z.string().optional(),
+  GHALA_RAILS_JWT: z.string().optional(),
+  GHALA_RAILS_CREDENTIAL_ID: z.coerce.number().optional(),
+  GHALA_RAILS_WEBHOOK_VERIFY_TOKEN: z.string().optional(),
 
   CSRF_SECRET: z.string().min(32).optional(),
   RATE_LIMIT_WINDOW_MS: z.coerce.number().default(900000),

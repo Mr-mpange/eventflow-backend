@@ -16,6 +16,7 @@ import guestRoutes from '@modules/guest/routes/guest.routes';
 import rsvpRoutes from '@modules/rsvp/routes/rsvp.routes';
 import qrRoutes from '@modules/qr/routes/qr.routes';
 import whatsappRoutes from '@modules/whatsapp/routes/whatsapp.routes';
+import whatsappWebhookRoutes from '@modules/whatsapp/routes/webhook.routes';
 import analyticsRoutes from '@modules/analytics/routes/analytics.routes';
 import subscriptionRoutes from '@modules/subscription/routes/subscription.routes';
 
@@ -44,6 +45,10 @@ export function createApp(): Application {
   app.get('/health', (_req, res) => {
     res.json({ status: 'ok', timestamp: new Date().toISOString(), version: env.API_VERSION });
   });
+
+  // GhalaRails webhook receiver — must be before JSON body parser for raw access
+  // No auth middleware: GhalaRails/Meta hits this directly
+  app.use('/webhook/whatsapp', whatsappWebhookRoutes);
 
   app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec));
   app.get('/api-docs.json', (_req, res) => res.json(swaggerSpec));
