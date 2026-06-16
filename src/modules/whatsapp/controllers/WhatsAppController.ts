@@ -68,4 +68,14 @@ export class WhatsAppController {
       next(error);
     }
   };
+
+  sendInvitation = async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const lang = (req.body?.language === 'sw' ? 'sw' : 'en') as 'en' | 'sw';
+      const result = await this.whatsAppService.sendInvitation(param(req.params.guestId), req.user!.sub, lang);
+      res.status(202).json({ success: true, data: result });
+    } catch (error) {
+      next(error);
+    }
+  };
 }

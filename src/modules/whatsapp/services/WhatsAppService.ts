@@ -6,9 +6,11 @@ import { EventRepository } from '@modules/event/repositories/EventRepository';
 import { NotFoundError, ForbiddenError, ValidationError } from '@/shared/errors/AppError';
 import { auditService } from '@/shared/services/AuditService';
 import { getWhatsAppQueue } from '@/queues/whatsapp.queue';
+import { ghalaRailsService } from '@/infrastructure/whatsapp/GhalaRailsService';
 import type { SendMessageDto, BulkMessageDto, ScheduleCampaignDto } from '../validators/whatsapp.validator';
 import { MessageStatus } from '@prisma/client';
 import { prisma } from '@/config/database';
+import { env } from '@/config/env';
 
 export class WhatsAppService {
   constructor(
@@ -154,5 +156,78 @@ export class WhatsAppService {
   async listCampaigns(eventId: string, userId: string) {
     await this.assertEventAccess(eventId, userId);
     return this.campaignRepo.findByEvent(eventId);
+  }
+
+  /**
+   * Send a WhatsApp event invitation to a guest.
+   * Uses the approved image template if the number is on WhatsApp,
+   * otherwise falls back to plain text with the RSVP + QR links.
+   */
+  async sendInvitation(guestId: string, userId: string, language: 'en' | 'sw' = 'en') {
+    const guest = await this.guestRepo.findById(guestId);
+    if (!guest) throw new NotFoundError('Guest', guestId);
+    if (!guest.phone) throw new ValidationError('Guest has no phone number');
+
+    const event = await this.assertEventAccess(guest.eventId, userId);
+
+    // Build public-facing links
+    const baseUrl = env.FRONTEND_URL ?? env.APP_URL;
+    const rsvpLink = `${baseUrl}/rsvp/${guest.id}`;
+    const qrLink = guest.qrCodeUrl ?? `${baseUrl}/qr/${guest.qrCode ?? guest.id}`;
+
+    // Format event date nicely
+    const eventDate = new Intl.DateTimeFormat('en-GB', {
+      day: 'numeric', month: 'long', year: 'numeric',
+    }).format(new Date(event.eventDate));
+
+    const location = event.venue ?? 'TBA';
+
+    // Try WhatsApp template first
+    const templateResult = await ghalaRailsService.sendInvitationTemplate({
+      to: guest.phone,
+      guestName: guest.fullName,
+      eventName: event.title,
+      eventDate,
+      location,
+      rsvpLink,
+      qrLink,
+      language,
+    });
+
+    // Record in DB
+    const message = await this.messageRepo.create({
+      guest: { connect: { id: guest.id } },
+      phone: guest.phone,
+      message: `Invitation: ${event.title}`,
+      status: templateResult.status === 'failed' ? MessageStatus.FAILED : MessageStatus.QUEUED,
+      ...(templateResult.externalId ? { externalId: templateResult.externalId } : {}),
+      ...(templateResult.error ? { errorMessage: templateResult.error } : {}),
+    });
+
+    // If WhatsApp failed (number not on WA), fall back to plain text
+    if (templateResult.status === 'failed') {
+      const fallbackText =
+        `You're invited to *${event.title}*!\n\n` +
+        `📅 Date: ${eventDate}\n` +
+        `📍 Location: ${location}\n\n` +
+        `✅ RSVP here: ${rsvpLink}\n` +
+        `🎫 Your QR code: ${qrLink}\n\n` +
+        `We look forward to seeing you!`;
+
+      await getWhatsAppQueue().add('send-message', { messageId: message.id, fallbackText }, {
+        attempts: 2,
+        backoff: { type: 'exponential', delay: 3000 },
+      });
+    }
+
+    await auditService.log('SEND', 'WhatsAppMessage', message.id, { userId });
+
+    return {
+      messageId: message.id,
+      channel: templateResult.status !== 'failed' ? 'whatsapp_template' : 'fallback_text',
+      status: message.status,
+      rsvpLink,
+      qrLink,
+    };
   }
 }

@@ -21,4 +21,7 @@ router.get('/campaigns/event/:eventId', whatsAppController.listCampaigns);
 router.get('/templates', whatsAppController.getTemplates);
 router.post('/templates', validate(createTemplateSchema), whatsAppController.createTemplate);
 
+// Send event invitation with RSVP + QR link to a guest via WhatsApp template
+router.post('/invite/:guestId', whatsAppController.sendInvitation);
+
 export default router;
