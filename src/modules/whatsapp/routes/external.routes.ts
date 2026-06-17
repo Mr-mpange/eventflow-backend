@@ -27,14 +27,14 @@ router.use(authenticateApiKey);
 
 const sendTemplateSchema = z.object({
   to: z.string().min(7).max(20), // E.164 e.g. +255712345678
-  template: z.enum(['eventflow_invite_en', 'eventflow_invite_sw']),
+  template: z.enum(['eventflow_invite_en', 'eventflow_invite_sw', 'event_invitation']),
   params: z.object({
     guestName: z.string().min(1).max(100),
     eventName: z.string().min(1).max(200),
     eventDate: z.string().min(1).max(100),
     location: z.string().min(1).max(200),
-    rsvpLink: z.string().url(),
-    qrLink: z.string().url(),
+    rsvpLink: z.string().url().optional(),
+    qrLink: z.string().url().optional(),
   }),
 });
 
@@ -100,7 +100,8 @@ router.post(
   async (req: ApiKeyRequest, res: Response, next: NextFunction) => {
     try {
       const { to, params } = req.body as z.infer<typeof sendTemplateSchema>;
-      const lang: 'en' | 'sw' = req.body.template?.endsWith('_sw') ? 'sw' : 'en';
+      const templateName: string = req.body.template;
+      const lang: 'en' | 'sw' = templateName.endsWith('_sw') ? 'sw' : 'en';
 
       const result = await ghalaRailsService.sendInvitationTemplate({
         to,
@@ -108,9 +109,10 @@ router.post(
         eventName: params.eventName,
         eventDate: params.eventDate,
         location: params.location,
-        rsvpLink: params.rsvpLink,
-        qrLink: params.qrLink,
+        rsvpLink: params.rsvpLink ?? '',
+        qrLink: params.qrLink ?? '',
         language: lang,
+        templateName,
       });
 
       res.status(202).json({
