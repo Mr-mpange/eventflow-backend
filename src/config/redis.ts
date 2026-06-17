@@ -40,7 +40,11 @@ export function getRedis(): Redis {
 
 export async function connectRedis(): Promise<void> {
   try {
-    await getRedis().ping();
+    const r = getRedis();
+    await Promise.race([
+      r.ping(),
+      new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 3000)),
+    ]);
     console.log('[Redis] Connected');
   } catch (err) {
     console.warn('[Redis] Could not connect — some features may be unavailable:', (err as Error).message);
