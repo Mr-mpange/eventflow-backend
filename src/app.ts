@@ -17,6 +17,8 @@ import rsvpRoutes from '@modules/rsvp/routes/rsvp.routes';
 import qrRoutes from '@modules/qr/routes/qr.routes';
 import whatsappRoutes from '@modules/whatsapp/routes/whatsapp.routes';
 import whatsappWebhookRoutes from '@modules/whatsapp/routes/webhook.routes';
+import whatsappExternalRoutes from '@modules/whatsapp/routes/external.routes';
+import apiKeyRoutes from '@/modules/apikey/apikey.routes';
 import analyticsRoutes from '@modules/analytics/routes/analytics.routes';
 import subscriptionRoutes from '@modules/subscription/routes/subscription.routes';
 
@@ -64,6 +66,10 @@ export function createApp(): Application {
   apiRouter.use('/whatsapp', whatsappRoutes);
   apiRouter.use('/analytics', analyticsRoutes);
   apiRouter.use('/subscriptions', subscriptionRoutes);
+  apiRouter.use('/api-keys', apiKeyRoutes);
+
+  // External developer API — authenticated via X-API-Key header
+  apiRouter.use('/external/whatsapp', whatsappExternalRoutes);
 
   app.use(`/api/${env.API_VERSION}`, apiRouter);
 
