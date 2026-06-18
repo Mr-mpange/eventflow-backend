@@ -33,9 +33,9 @@ const sendTemplateSchema = z.object({
     eventName: z.string().min(1).max(200),
     eventDate: z.string().min(1).max(100),
     location: z.string().min(1).max(200),
-    rsvpLink: z.string().url().optional(),
-    qrLink: z.string().url().optional(),
-    imageUrl: z.string().url().optional(), // Public image URL for the template header
+    rsvpLink: z.string().min(1).max(500).optional(),
+    qrLink: z.string().min(1).max(500).optional(),
+    imageUrl: z.string().url(), // Public image URL — required for IMAGE header templates
   }),
 });
 

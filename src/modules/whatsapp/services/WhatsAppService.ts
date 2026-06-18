@@ -182,6 +182,11 @@ export class WhatsAppService {
 
     const location = event.venue ?? 'TBA';
 
+    // imageUrl must be a publicly reachable URL — WhatsApp servers fetch it directly.
+    // Use the event's cover image if available, otherwise skip the image header by
+    // falling back to plain text (the template call will fail without a valid imageUrl).
+    const imageUrl = event.coverImageUrl ?? undefined;
+
     // Try WhatsApp template first
     const templateResult = await ghalaRailsService.sendInvitationTemplate({
       to: guest.phone,
@@ -192,6 +197,7 @@ export class WhatsAppService {
       rsvpLink,
       qrLink,
       language,
+      imageUrl,
     });
 
     // Record in DB

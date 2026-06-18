@@ -196,13 +196,30 @@ export class GhalaRailsService {
         },
       ];
 
-      // Add image header component if imageUrl is provided
-      if (payload.imageUrl) {
-        templateComponents.unshift({
-          type: 'header',
-          parameters: [{ type: 'image', image: { link: payload.imageUrl } }],
-        });
+      if (!payload.imageUrl) {
+        return {
+          externalId: '',
+          status: 'failed',
+          error: 'imageUrl is required for eventflow_invite templates (IMAGE header)',
+        };
       }
+
+      templateComponents.unshift({
+        type: 'header',
+        parameters: [{ type: 'image', image: { link: payload.imageUrl } }],
+      });
+
+      const buttonSuffix = (value: string) => {
+        const trimmed = value.trim();
+        if (!trimmed) return '';
+        try {
+          const url = new URL(trimmed);
+          const path = url.pathname.replace(/\/$/, '');
+          return path.slice(path.lastIndexOf('/') + 1) || trimmed;
+        } catch {
+          return trimmed;
+        }
+      };
 
       // Only add button components if links are provided
       if (payload.rsvpLink) {
@@ -210,7 +227,7 @@ export class GhalaRailsService {
           type: 'button',
           sub_type: 'url',
           index: '0',
-          parameters: [{ type: 'text', text: payload.rsvpLink }],
+          parameters: [{ type: 'text', text: buttonSuffix(payload.rsvpLink) }],
         });
       }
       if (payload.qrLink) {
@@ -218,7 +235,7 @@ export class GhalaRailsService {
           type: 'button',
           sub_type: 'url',
           index: '1',
-          parameters: [{ type: 'text', text: payload.qrLink }],
+          parameters: [{ type: 'text', text: buttonSuffix(payload.qrLink) }],
         });
       }
 
