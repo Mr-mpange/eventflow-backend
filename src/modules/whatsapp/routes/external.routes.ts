@@ -80,6 +80,9 @@ const sendTextSchema = z.object({
  *
  *       5. **imageUrl not publicly accessible** — The template has an IMAGE header.
  *          The image URL must be publicly reachable by WhatsApp servers (no localhost, no auth-protected URLs).
+ *          Options: (a) use a Cloudinary/S3 public URL, or (b) serve it from your deployed app at
+ *          `GET /api/events/{id}/whatsapp-cover` — that endpoint requires no authentication and is
+ *          designed exactly for this purpose.
  *
  *       ---
  *       ### Available templates
@@ -87,6 +90,7 @@ const sendTextSchema = z.object({
  *       |---|---|---|---|---|
  *       | `eventflow_invite_sw` | Swahili | ✅ Approved | ✅ Yes | ✅ RSVP + QR |
  *       | `eventflow_invite_en` | English | ⚠️ Check status | ✅ Yes | ✅ RSVP + QR |
+ *       | `event_invitation` | Swahili (alias) | ✅ Approved | ✅ Yes | ✅ RSVP + QR |
  *
  *       ---
  *       ### How to verify delivery

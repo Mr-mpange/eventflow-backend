@@ -80,6 +80,8 @@ Placeholders like \`"test-123"\` make the buttons point to pages that don't exis
 **6. imageUrl must be publicly accessible**
 WhatsApp servers fetch the image directly. URLs behind authentication,
 localhost addresses, or expired CDN links will cause the message to fail.
+Options: use a Cloudinary/S3 public URL, or serve the image from your own
+deployed app via GET /api/events/{id}/whatsapp-cover (no auth required on that endpoint).
 
 **7. Status stays QUEUED forever**
 The BullMQ worker processes messages from the Redis queue.
@@ -180,13 +182,13 @@ Delivery and read receipts are updated via GhalaRails webhook callbacks.
             },
             template: {
               type: 'string',
-              enum: ['eventflow_invite_sw', 'eventflow_invite_en'],
-              description: 'Template name. Use `eventflow_invite_sw` (Swahili, approved ✅). Check approval status of `eventflow_invite_en` before using.',
+              enum: ['eventflow_invite_sw', 'eventflow_invite_en', 'event_invitation'],
+              description: 'Template name. Use `eventflow_invite_sw` (Swahili, approved ✅). `event_invitation` is an alias accepted by the API. Check approval status of `eventflow_invite_en` before using.',
               example: 'eventflow_invite_sw',
             },
             params: {
               type: 'object',
-              required: ['guestName', 'eventName', 'eventDate', 'location'],
+              required: ['guestName', 'eventName', 'eventDate', 'location', 'imageUrl'],
               properties: {
                 guestName: { type: 'string', example: 'Ali Hassan', description: 'Guest full name — personalises the greeting' },
                 eventName: { type: 'string', example: 'Harusi ya Amina na Juma', description: 'Name of the event' },
@@ -208,7 +210,7 @@ Delivery and read receipts are updated via GhalaRails webhook callbacks.
                   type: 'string',
                   format: 'uri',
                   example: 'https://res.cloudinary.com/yourcloud/image/upload/event-poster.jpg',
-                  description: 'Publicly accessible image URL for the template header. Must be reachable by WhatsApp servers — no localhost, no auth-protected URLs. Recommended: Cloudinary or S3 public URL.',
+                  description: "Required. Publicly accessible image URL for the template IMAGE header — WhatsApp servers fetch this directly. Must be reachable without authentication. Options: (1) Cloudinary/S3 public URL, (2) your app's `/api/events/{id}/whatsapp-cover` endpoint if deployed to a public host (e.g. Render).",
                 },
               },
             },
