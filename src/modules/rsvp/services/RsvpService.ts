@@ -3,6 +3,7 @@ import { GuestRepository } from '@modules/guest/repositories/GuestRepository';
 import { NotFoundError, ValidationError } from '@/shared/errors/AppError';
 import type { RsvpResponseDto } from '../validators/rsvp.validator';
 import { RsvpStatus } from '@prisma/client';
+import { extractUrlPathToken } from '@/shared/utils/helpers';
 
 export class RsvpService {
   constructor(
@@ -10,8 +11,12 @@ export class RsvpService {
     private readonly guestRepo: GuestRepository,
   ) {}
 
+  private normalizeQrCode(input: string) {
+    return extractUrlPathToken(input);
+  }
+
   async respond(dto: RsvpResponseDto, meta?: { ip?: string; userAgent?: string }) {
-    const guest = await this.guestRepo.findByQrCode(dto.qrCode);
+    const guest = await this.guestRepo.findByQrCode(this.normalizeQrCode(dto.qrCode));
     if (!guest) throw new NotFoundError('Guest');
 
     const response = await this.rsvpRepo.create({

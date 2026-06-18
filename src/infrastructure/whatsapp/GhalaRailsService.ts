@@ -1,4 +1,5 @@
 import { env } from '@/config/env';
+import { extractUrlPathToken } from '@/shared/utils/helpers';
 
 export interface WhatsAppSendPayload {
   to: string; // phone number in E.164 format e.g. +255712345678
@@ -209,17 +210,7 @@ export class GhalaRailsService {
         parameters: [{ type: 'image', image: { link: payload.imageUrl } }],
       });
 
-      const buttonSuffix = (value: string) => {
-        const trimmed = value.trim();
-        if (!trimmed) return '';
-        try {
-          const url = new URL(trimmed);
-          const path = url.pathname.replace(/\/$/, '');
-          return path.slice(path.lastIndexOf('/') + 1) || trimmed;
-        } catch {
-          return trimmed;
-        }
-      };
+      const buttonSuffix = (value: string) => extractUrlPathToken(value);
 
       // Only add button components if links are provided
       if (payload.rsvpLink) {

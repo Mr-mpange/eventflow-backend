@@ -173,7 +173,7 @@ export class WhatsAppService {
     // Build public-facing links
     const baseUrl = env.FRONTEND_URL ?? env.APP_URL;
     const rsvpLink = `${baseUrl}/rsvp/${guest.id}`;
-    const qrLink = guest.qrCodeUrl ?? `${baseUrl}/qr/${guest.qrCode ?? guest.id}`;
+    const qrLink = `${baseUrl}/qr/${guest.qrCode ?? guest.id}`;
 
     // Format event date nicely
     const eventDate = new Intl.DateTimeFormat('en-GB', {

@@ -42,3 +42,26 @@ export function paginatedResponse<T>(
     },
   };
 }
+
+export function extractUrlPathToken(value: string): string {
+  const raw = value.trim();
+  if (!raw) return '';
+
+  const candidate = raw.replace(/\\+/g, '/');
+
+  try {
+    const url = new URL(candidate);
+    const segments = url.pathname.split('/').filter(Boolean);
+    if (segments.length > 0) return segments.at(-1) ?? '';
+    return '';
+  } catch {
+    const cleaned = candidate
+      .replace(/^https?:\/+/i, '')
+      .replace(/^\/+/, '')
+      .replace(/\/+$/, '');
+
+    if (!cleaned) return '';
+    const segments = cleaned.split('/').filter(Boolean);
+    return segments.at(-1) ?? cleaned;
+  }
+}

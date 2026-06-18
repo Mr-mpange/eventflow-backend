@@ -1,5 +1,5 @@
 import { hashPassword, verifyPassword } from '@/shared/utils/password';
-import { generateToken, generateSlug, paginate, paginatedResponse } from '@/shared/utils/helpers';
+import { generateToken, generateSlug, paginate, paginatedResponse, extractUrlPathToken } from '@/shared/utils/helpers';
 import { signAccessToken, verifyAccessToken } from '@/shared/utils/jwt';
 import { jwtConfig } from '@/config';
 
@@ -37,6 +37,15 @@ describe('Helper Utils', () => {
     expect(result.meta.total).toBe(50);
     expect(result.meta.totalPages).toBe(3);
     expect(result.meta.hasNext).toBe(true);
+  });
+
+  it('should extract the token from a url or malformed url input', () => {
+    expect(extractUrlPathToken('https://www.eventflow.app/rsvp/550e8400-e29b-41d4-a716-446655440000'))
+      .toBe('550e8400-e29b-41d4-a716-446655440000');
+    expect(extractUrlPathToken('https:/wedding-scanner.onrender.com'))
+      .toBe('');
+    expect(extractUrlPathToken('550e8400-e29b-41d4-a716-446655440000'))
+      .toBe('550e8400-e29b-41d4-a716-446655440000');
   });
 });
 

@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { qrController } from '@/shared/container';
 import { authenticate } from '@/middleware/auth';
 import { validate } from '@/middleware/validate';
+import { extractUrlPathToken } from '@/shared/utils/helpers';
 
 const router = Router();
 
@@ -93,7 +94,10 @@ router.use(authenticate);
 router.post('/generate/:guestId', qrController.generate);
 router.get('/verify/:qrCode', qrController.verify);
 router.post('/check-in', validate(z.object({
-  qrCode: z.string().uuid(),
+  qrCode: z.preprocess(
+    (value) => (typeof value === 'string' ? extractUrlPathToken(value) : value),
+    z.string().uuid(),
+  ),
   notes: z.string().max(500).optional(),
 })), qrController.checkIn);
 router.get('/attendance/:eventId', qrController.attendanceLogs);

@@ -6,6 +6,7 @@ import { EventRepository } from '@modules/event/repositories/EventRepository';
 import { NotFoundError, ForbiddenError, ValidationError } from '@/shared/errors/AppError';
 import { auditService } from '@/shared/services/AuditService';
 import { cloudinaryService } from '@/infrastructure/storage/CloudinaryService';
+import { extractUrlPathToken } from '@/shared/utils/helpers';
 
 export class QrService {
   constructor(
@@ -13,6 +14,10 @@ export class QrService {
     private readonly attendanceRepo: AttendanceLogRepository,
     private readonly eventRepo: EventRepository,
   ) {}
+
+  private normalizeQrCode(input: string) {
+    return extractUrlPathToken(input);
+  }
 
   async generate(guestId: string, userId: string) {
     const guest = await this.guestRepo.findById(guestId);
@@ -31,7 +36,7 @@ export class QrService {
   }
 
   async verify(qrCode: string) {
-    const guest = await this.guestRepo.findByQrCode(qrCode);
+    const guest = await this.guestRepo.findByQrCode(this.normalizeQrCode(qrCode));
     if (!guest) throw new NotFoundError('Guest');
 
     const event = await this.eventRepo.findById(guest.eventId);
@@ -53,7 +58,7 @@ export class QrService {
   }
 
   async checkIn(qrCode: string, staffUserId: string, notes?: string) {
-    const guest = await this.guestRepo.findByQrCode(qrCode);
+    const guest = await this.guestRepo.findByQrCode(this.normalizeQrCode(qrCode));
     if (!guest) throw new NotFoundError('Guest');
 
     const event = await this.eventRepo.findById(guest.eventId);
