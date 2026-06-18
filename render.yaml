@@ -13,26 +13,58 @@ services:
         value: 10000
       - key: API_VERSION
         value: v1
+      - key: APP_URL
+        value: https://eventflow-backend.onrender.com
+      - key: FRONTEND_URL
+        value: https://wedding-scanner.onrender.com
+
+      # ── Database ────────────────────────────────────────────
       - key: DATABASE_URL
         fromDatabase:
           name: eventflow-db
           property: connectionString
+
+      # ── Redis ───────────────────────────────────────────────
       - key: REDIS_URL
-        fromService:
-          name: eventflow-redis
-          type: redis
-          property: connectionString
+        value: rediss://default:gQAAAAAAAegWAAIgcDFkNDI1ZGVlNTZhMTU0NmUwODUwNDZjOTI5M2Q5MDU5Mg@enjoyed-mole-124950.upstash.io:6379
+
+      # ── JWT ─────────────────────────────────────────────────
       - key: JWT_ACCESS_SECRET
         generateValue: true
       - key: JWT_REFRESH_SECRET
         generateValue: true
+      - key: JWT_ACCESS_EXPIRES_IN
+        value: 15m
+      - key: JWT_REFRESH_EXPIRES_IN
+        value: 7d
+
+      # ── Security ────────────────────────────────────────────
       - key: CSRF_SECRET
         generateValue: true
+      - key: RATE_LIMIT_WINDOW_MS
+        value: 900000
+      - key: RATE_LIMIT_MAX_REQUESTS
+        value: 100
+
+      # ── WhatsApp (GhalaRails) ────────────────────────────────
+      # Set these manually in the Render dashboard (sensitive values)
+      # - key: GHALA_RAILS_API_URL      → https://api.ghala.io
+      # - key: GHALA_RAILS_JWT          → your JWT from dev.ghala.io
+      # - key: GHALA_RAILS_CREDENTIAL_ID → 245
+      # - key: GHALA_RAILS_WEBHOOK_VERIFY_TOKEN → your verify token
+
+      # ── Email (optional) ────────────────────────────────────
+      # - key: SMTP_HOST
+      # - key: SMTP_PORT
+      # - key: SMTP_USER
+      # - key: SMTP_PASS
+      # - key: SMTP_FROM
+
+      # ── Cloudinary (optional) ───────────────────────────────
+      # - key: CLOUDINARY_CLOUD_NAME
+      # - key: CLOUDINARY_API_KEY
+      # - key: CLOUDINARY_API_SECRET
 
 databases:
   - name: eventflow-db
     plan: free
-
-  - name: eventflow-redis
-    plan: free
-    ipAllowList: []

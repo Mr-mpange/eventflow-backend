@@ -3,6 +3,18 @@ import { env } from './env';
 
 function buildRedisOptions() {
   const url = env.REDIS_URL;
+
+  // Guard against misconfigured env vars (e.g. a redis-cli command string)
+  if (!url.startsWith('redis://') && !url.startsWith('rediss://')) {
+    console.warn('[Redis] REDIS_URL does not look like a valid Redis URL — falling back to localhost:6379');
+    return {
+      host: 'localhost',
+      port: 6379,
+      maxRetriesPerRequest: null as null,
+      enableReadyCheck: false,
+    };
+  }
+
   const parsed = new URL(url);
   const isTls = url.startsWith('rediss://');
 
