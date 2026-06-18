@@ -17,6 +17,7 @@ export interface WhatsAppInvitationPayload {
   qrLink: string;
   language?: 'en' | 'sw';
   templateName?: string; // override — use exact template name if provided
+  imageUrl?: string;     // public image URL for the template IMAGE header
 }
 
 export interface WhatsAppSendResult {
@@ -194,6 +195,14 @@ export class GhalaRailsService {
           ],
         },
       ];
+
+      // Add image header component if imageUrl is provided
+      if (payload.imageUrl) {
+        templateComponents.unshift({
+          type: 'header',
+          parameters: [{ type: 'image', image: { link: payload.imageUrl } }],
+        });
+      }
 
       // Only add button components if links are provided
       if (payload.rsvpLink) {

@@ -35,6 +35,7 @@ const sendTemplateSchema = z.object({
     location: z.string().min(1).max(200),
     rsvpLink: z.string().url().optional(),
     qrLink: z.string().url().optional(),
+    imageUrl: z.string().url().optional(), // Public image URL for the template header
   }),
 });
 
@@ -53,11 +54,45 @@ const sendTextSchema = z.object({
  *     summary: Send a WhatsApp template message
  *     description: |
  *       Send an approved WhatsApp template to any phone number.
- *       Templates work **without** the recipient needing to message you first.
+ *       Templates work **without** the recipient needing to message you first (outside the 24-hour session window).
  *
- *       Available templates:
- *       - `eventflow_invite_en` — English invitation with RSVP + QR buttons
- *       - `eventflow_invite_sw` — Swahili invitation with RSVP + QR buttons
+ *       ---
+ *       ### ⚠️ Why does the API return "queued" but the customer doesn't receive the message?
+ *
+ *       **"queued" means the request was accepted by our system — it does NOT guarantee delivery.**
+ *       Here are the most common reasons a message is queued but never received:
+ *
+ *       1. **Wrong phone format** — Phone number must be in E.164 format with country code.
+ *          - ✅ Correct: `+255712345678`
+ *          - ❌ Wrong: `0712345678`, `255712345678`, `712345678`
+ *
+ *       2. **Number not on WhatsApp** — The recipient's number must be registered on WhatsApp.
+ *          These are WhatsApp messages, NOT SMS. If the number is not on WhatsApp, the message will fail silently.
+ *
+ *       3. **Wrong template name** — Only use approved template names exactly as listed:
+ *          - `eventflow_invite_sw` (Swahili, **approved** ✅)
+ *          - `eventflow_invite_en` (English — check approval status before using)
+ *          Using a wrong or unapproved template name causes silent failure.
+ *
+ *       4. **rsvpLink / qrLink must be real URLs** — The RSVP and QR buttons use these as URL suffixes.
+ *          Passing placeholder values like `"test-123"` makes the buttons point to non-existent pages.
+ *          Always pass the full token/path your frontend uses, e.g. `"guest-uuid-here"`.
+ *
+ *       5. **imageUrl not publicly accessible** — The template has an IMAGE header.
+ *          The image URL must be publicly reachable by WhatsApp servers (no localhost, no auth-protected URLs).
+ *
+ *       ---
+ *       ### Available templates
+ *       | Template | Language | Status | Has Image | Has Buttons |
+ *       |---|---|---|---|---|
+ *       | `eventflow_invite_sw` | Swahili | ✅ Approved | ✅ Yes | ✅ RSVP + QR |
+ *       | `eventflow_invite_en` | English | ⚠️ Check status | ✅ Yes | ✅ RSVP + QR |
+ *
+ *       ---
+ *       ### How to verify delivery
+ *       After sending, use `GET /external/whatsapp/status/{messageId}` to poll the status.
+ *       Status transitions: `QUEUED` → `SENT` → `DELIVERED` → `READ`
+ *       If status stays `QUEUED` or becomes `FAILED`, check the `errorMessage` field.
  *     security:
  *       - apiKeyAuth: []
  *     requestBody:
@@ -68,30 +103,51 @@ const sendTextSchema = z.object({
  *             $ref: '#/components/schemas/SendTemplateRequest'
  *           example:
  *             to: "+255712345678"
- *             template: "eventflow_invite_en"
+ *             template: "eventflow_invite_sw"
  *             params:
  *               guestName: "Ali Hassan"
- *               eventName: "Wedding Ceremony"
- *               eventDate: "July 5, 2026"
+ *               eventName: "Harusi ya Amina na Juma"
+ *               eventDate: "5 Julai 2026"
  *               location: "Serena Hotel, Dar es Salaam"
- *               rsvpLink: "https://yourapp.com/rsvp/abc123"
- *               qrLink: "https://yourapp.com/qr/abc123"
+ *               rsvpLink: "https://yourapp.com/rsvp/guest-uuid-here"
+ *               qrLink: "https://yourapp.com/qr/guest-uuid-here"
+ *               imageUrl: "https://res.cloudinary.com/yourcloud/image/upload/event-poster.jpg"
  *     responses:
  *       202:
- *         description: Message queued successfully
+ *         description: |
+ *           Message accepted and queued. **This does not mean the customer received it.**
+ *           Use `GET /external/whatsapp/status/{messageId}` to check actual delivery.
  *         content:
  *           application/json:
- *             example:
- *               success: true
- *               data:
- *                 messageId: "283850"
- *                 status: "queued"
- *                 to: "+255712345678"
- *                 template: "eventflow_invite_en"
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     messageId:
+ *                       type: string
+ *                       description: Use this ID to check delivery status
+ *                       example: "286307"
+ *                     status:
+ *                       type: string
+ *                       enum: [queued, sent, failed]
+ *                       description: Initial status — poll /status/{messageId} for updates
+ *                     to:
+ *                       type: string
+ *                       example: "+255712345678"
+ *                     template:
+ *                       type: string
+ *                       example: "eventflow_invite_sw"
+ *       400:
+ *         description: Validation error — check phone format (must be E.164) and required params
  *       401:
- *         description: Missing or invalid API key
+ *         description: Missing or invalid API key — include `X-API-Key` header
  *       403:
- *         description: API key lacks send_message permission
+ *         description: API key lacks `send_message` permission
  */
 router.post(
   '/send/template',
@@ -113,6 +169,7 @@ router.post(
         qrLink: params.qrLink ?? '',
         language: lang,
         templateName,
+        imageUrl: params.imageUrl,
       });
 
       res.status(202).json({
@@ -137,9 +194,17 @@ router.post(
  *     tags: [External WhatsApp API]
  *     summary: Send a plain text WhatsApp message
  *     description: |
- *       Send a free-text message. **Note:** Only works if the recipient has messaged
- *       your business number within the last 24 hours (WhatsApp session window).
- *       For first-contact messages, use the template endpoint instead.
+ *       Send a free-text message to a recipient.
+ *
+ *       ### ⚠️ Important — 24-hour session window
+ *       WhatsApp only allows free-text messages if the recipient **messaged your business number
+ *       within the last 24 hours**. Outside that window, the message will be silently rejected by WhatsApp.
+ *
+ *       **For first-contact messages (invitations, reminders), always use the template endpoint instead.**
+ *       Templates bypass the 24-hour restriction.
+ *
+ *       ### ⚠️ Phone format
+ *       Must be E.164 format with country code. Example: `+255712345678` (not `0712345678`).
  *     security:
  *       - apiKeyAuth: []
  *     requestBody:
@@ -153,12 +218,26 @@ router.post(
  *               to:
  *                 type: string
  *                 example: "+255712345678"
+ *                 description: Phone in E.164 format — must include country code e.g. +255 for Tanzania
  *               message:
  *                 type: string
  *                 example: "Your event starts tomorrow at 10am!"
+ *                 maxLength: 4096
  *     responses:
  *       202:
- *         description: Message queued
+ *         description: |
+ *           Message accepted. **Only delivers if the recipient messaged your WhatsApp number in the last 24 hours.**
+ *           Use the template endpoint for guaranteed first-contact delivery.
+ *         content:
+ *           application/json:
+ *             example:
+ *               success: true
+ *               data:
+ *                 messageId: "286310"
+ *                 status: "queued"
+ *                 to: "+255712345678"
+ *       400:
+ *         description: Validation error — check phone format
  *       401:
  *         description: Missing or invalid API key
  */
@@ -287,7 +366,35 @@ router.get(
  *   get:
  *     tags: [External WhatsApp API]
  *     summary: Check delivery status of a message
- *     description: Returns the current delivery status (QUEUED, SENT, DELIVERED, READ, FAILED).
+ *     description: |
+ *       Returns the current delivery status of a message.
+ *
+ *       ### Status lifecycle
+ *       ```
+ *       QUEUED → SENT → DELIVERED → READ
+ *                           ↓
+ *                         FAILED
+ *       ```
+ *
+ *       | Status | Meaning |
+ *       |---|---|
+ *       | `QUEUED` | Accepted by EventFlow, not yet sent to WhatsApp |
+ *       | `SENT` | Sent to WhatsApp — waiting for recipient's device |
+ *       | `DELIVERED` | Reached the recipient's phone ✅ |
+ *       | `READ` | Recipient opened the message ✅ |
+ *       | `FAILED` | Delivery failed — check `errorMessage` for reason |
+ *
+ *       ### Why does status stay QUEUED?
+ *       - The background worker may not be running on the server
+ *       - Redis queue may be down
+ *       - Contact creation on GhalaRails failed
+ *
+ *       ### Why does status stay SENT but never DELIVERED?
+ *       - The recipient's number may not be on WhatsApp
+ *       - The recipient's phone is off or has no internet
+ *       - Webhook updates may not be configured (delivery/read receipts come via webhook)
+ *
+ *       **Note:** The `messageId` here is the `externalId` returned from the send endpoint (GhalaRails message ID).
  *     security:
  *       - apiKeyAuth: []
  *     parameters:
@@ -296,7 +403,8 @@ router.get(
  *         required: true
  *         schema:
  *           type: string
- *         description: The externalId returned when sending a message
+ *         description: The `messageId` (externalId) returned from POST /send/template or /send/text
+ *         example: "286307"
  *     responses:
  *       200:
  *         description: Message status
@@ -304,8 +412,20 @@ router.get(
  *           application/json:
  *             schema:
  *               $ref: '#/components/schemas/MessageStatus'
+ *             example:
+ *               success: true
+ *               data:
+ *                 id: "uuid"
+ *                 phone: "+255712345678"
+ *                 status: "DELIVERED"
+ *                 externalId: "286307"
+ *                 errorMessage: null
+ *                 sentAt: "2026-06-18T06:42:08Z"
+ *                 deliveredAt: "2026-06-18T06:42:15Z"
+ *                 readAt: null
+ *                 createdAt: "2026-06-18T06:42:05Z"
  *       404:
- *         description: Message not found
+ *         description: Message not found — the messageId may be from GhalaRails directly (not tracked in EventFlow DB)
  */
 router.get(
   '/status/:messageId',
