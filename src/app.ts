@@ -32,11 +32,19 @@ export function createApp(): Application {
     crossOriginEmbedderPolicy: false,
   }));
 
+  // Tight CORS for browser/frontend routes
   app.use(cors({
     origin: env.FRONTEND_URL,
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization', 'X-CSRF-Token'],
+  }));
+
+  // Open CORS for external API (X-API-Key authenticated, called by third-party servers)
+  app.use(`/api/${env.API_VERSION}/external`, cors({
+    origin: '*',
+    methods: ['GET', 'POST', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'X-API-Key', 'ngrok-skip-browser-warning'],
   }));
 
   app.use(express.json({ limit: '10mb' }));

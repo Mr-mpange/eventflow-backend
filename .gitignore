@@ -7,3 +7,6 @@ coverage/
 .DS_Store
 uploads/
 .prisma/
+
+# Local test / debug scripts (not for production)
+scripts/
