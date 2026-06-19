@@ -192,7 +192,7 @@ export class WhatsAppService {
     // imageUrl priority: explicit per-guest override → event cover image
     const imageUrl = dto.imageUrl ?? event.coverImageUrl ?? undefined;
 
-    // Try WhatsApp template first
+    // Try WhatsApp template first — always use eventflow_invite_sw (the only working template)
     const templateResult = await ghalaRailsService.sendInvitationTemplate({
       to: guest.phone,
       guestName: guest.fullName,
@@ -201,7 +201,8 @@ export class WhatsAppService {
       location,
       rsvpLink,
       qrLink,
-      language: dto.language ?? 'sw',
+      language: 'sw',
+      templateName: 'eventflow_invite_sw',
       imageUrl,
     });
 
@@ -313,7 +314,8 @@ export class WhatsAppService {
         location,
         rsvpLink,
         qrLink,
-        language,
+        language: 'sw',
+        templateName: 'eventflow_invite_sw',
         imageUrl,
       });
 

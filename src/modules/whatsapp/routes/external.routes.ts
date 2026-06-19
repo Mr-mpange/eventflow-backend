@@ -25,9 +25,15 @@ router.use(authenticateApiKey);
 
 // ─── Schemas ────────────────────────────────────────────────
 
+// Only eventflow_invite_sw is confirmed working on Meta.
+// event_invitation / eventflow_invite_en both return "Meta API error (100): Invalid parameter".
+const WORKING_TEMPLATE = 'eventflow_invite_sw' as const;
+
 const sendTemplateSchema = z.object({
   to: z.string().min(7).max(20), // E.164 e.g. +255712345678
-  template: z.enum(['eventflow_invite_en', 'eventflow_invite_sw', 'event_invitation']),
+  // Accept any value but silently coerce broken templates to the working one (see handler below)
+  template: z.enum(['eventflow_invite_sw', 'eventflow_invite_en', 'event_invitation'])
+    .default('eventflow_invite_sw'),
   params: z.object({
     guestName: z.string().min(1).max(100),
     eventName: z.string().min(1).max(200),
@@ -35,7 +41,7 @@ const sendTemplateSchema = z.object({
     location: z.string().min(1).max(200),
     rsvpLink: z.string().min(1).max(500).optional(),
     qrLink: z.string().min(1).max(500).optional(),
-    imageUrl: z.string().url(), // Public image URL — required for IMAGE header templates
+    imageUrl: z.string().url(), // Public image URL — required for IMAGE header
   }),
 });
 
@@ -88,9 +94,12 @@ const sendTextSchema = z.object({
  *       ### Available templates
  *       | Template | Language | Status | Has Image | Has Buttons |
  *       |---|---|---|---|---|
- *       | `eventflow_invite_sw` | Swahili | ✅ Approved | ✅ Yes | ✅ RSVP + QR |
- *       | `eventflow_invite_en` | English | ⚠️ Check status | ✅ Yes | ✅ RSVP + QR |
- *       | `event_invitation` | Swahili (alias) | ✅ Approved | ✅ Yes | ✅ RSVP + QR |
+ *       | `eventflow_invite_sw` | Swahili | ✅ **Only working template** | ✅ Yes | ✅ RSVP + QR |
+ *       | `eventflow_invite_en` | English | ❌ Meta error — do NOT use | ✅ Yes | ✅ RSVP + QR |
+ *       | `event_invitation` | English | ❌ Meta error — do NOT use | ❌ No | ❌ No |
+ *
+ *       > Passing `event_invitation` or `eventflow_invite_en` will silently fall back to
+ *       > `eventflow_invite_sw` and a `warning` field will appear in the response.
  *
  *       ---
  *       ### How to verify delivery
@@ -160,8 +169,14 @@ router.post(
   async (req: ApiKeyRequest, res: Response, next: NextFunction) => {
     try {
       const { to, params } = req.body as z.infer<typeof sendTemplateSchema>;
-      const templateName: string = req.body.template;
-      const lang: 'en' | 'sw' = templateName.endsWith('_sw') ? 'sw' : 'en';
+
+      // Always use the only confirmed-working template.
+      // event_invitation and eventflow_invite_en both return
+      // "Meta API error (100): Invalid parameter" from Meta.
+      const templateName = WORKING_TEMPLATE;
+      const warned = (req.body.template !== WORKING_TEMPLATE)
+        ? `Requested template "${req.body.template}" has a Meta error — automatically used "${WORKING_TEMPLATE}" instead.`
+        : undefined;
 
       const result = await ghalaRailsService.sendInvitationTemplate({
         to,
@@ -171,7 +186,7 @@ router.post(
         location: params.location,
         rsvpLink: params.rsvpLink ?? '',
         qrLink: params.qrLink ?? '',
-        language: lang,
+        language: 'sw',
         templateName,
         imageUrl: params.imageUrl,
       });
@@ -182,7 +197,9 @@ router.post(
           messageId: result.externalId,
           status: result.status,
           to,
-          template: req.body.template,
+          template: templateName,
+          ...(warned ? { warning: warned } : {}),
+          ...(result.error ? { error: result.error } : {}),
         },
       });
     } catch (error) {
@@ -590,16 +607,28 @@ router.get('/templates', async (_req: Request, res: Response) => {
     data: {
       templates: [
         {
-          name: 'eventflow_invite_en',
-          language: 'en',
-          description: 'Event invitation in English with RSVP and QR code buttons',
-          params: ['guestName', 'eventName', 'eventDate', 'location', 'rsvpLink', 'qrLink'],
-        },
-        {
           name: 'eventflow_invite_sw',
           language: 'sw',
-          description: 'Event invitation in Swahili with RSVP and QR code buttons',
-          params: ['guestName', 'eventName', 'eventDate', 'location', 'rsvpLink', 'qrLink'],
+          status: 'approved',
+          working: true,
+          description: 'Event invitation in Swahili — IMAGE header + RSVP + QR buttons. This is the ONLY working template.',
+          params: ['guestName', 'eventName', 'eventDate', 'location', 'rsvpLink', 'qrLink', 'imageUrl'],
+        },
+        {
+          name: 'eventflow_invite_en',
+          language: 'en',
+          status: 'draft',
+          working: false,
+          description: 'English template — NOT approved on Meta yet. Will fall back to eventflow_invite_sw.',
+          params: ['guestName', 'eventName', 'eventDate', 'location', 'rsvpLink', 'qrLink', 'imageUrl'],
+        },
+        {
+          name: 'event_invitation',
+          language: 'en',
+          status: 'error',
+          working: false,
+          description: 'Returns Meta API error (100): Invalid parameter. Will fall back to eventflow_invite_sw.',
+          params: ['guestName', 'eventName', 'eventDate', 'location'],
         },
       ],
     },
