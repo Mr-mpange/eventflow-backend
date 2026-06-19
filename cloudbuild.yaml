@@ -1,0 +1,179 @@
+# Google Cloud Build — EventFlow Backend
+#
+# Triggered on every push to the `main` branch.
+# Pipeline:
+#   1. Install deps & run tests
+#   2. Build Docker images (api + worker) and push to Artifact Registry
+#   3. Deploy api    → Cloud Run service  eventflow-api
+#   4. Deploy worker → Cloud Run service  eventflow-worker
+#
+# Required Cloud Build substitution variables (set in the trigger UI):
+#   _REGION            e.g. us-central1
+#   _AR_REPO           Artifact Registry repo name e.g. eventflow
+#   _SERVICE_API       Cloud Run service name for the API  e.g. eventflow-api
+#   _SERVICE_WORKER    Cloud Run service name for worker   e.g. eventflow-worker
+#   _APP_URL           Public backend URL  e.g. https://eventflow-api-xxxx-uc.a.run.app
+#   _FRONTEND_URL      Public frontend URL e.g. https://yourfrontend.vercel.app
+#
+# Secret Manager secrets (referenced as _SECRET_* below — bind in trigger UI):
+#   eventflow-db-url              DATABASE_URL
+#   eventflow-redis-url           REDIS_URL
+#   eventflow-jwt-access          JWT_ACCESS_SECRET
+#   eventflow-jwt-refresh         JWT_REFRESH_SECRET
+#   eventflow-csrf-secret         CSRF_SECRET
+#   eventflow-ghala-jwt           GHALA_RAILS_JWT
+#   eventflow-ghala-credential-id GHALA_RAILS_CREDENTIAL_ID
+#   eventflow-ghala-webhook-token GHALA_RAILS_WEBHOOK_VERIFY_TOKEN
+#   eventflow-cloudinary-name     CLOUDINARY_CLOUD_NAME
+#   eventflow-cloudinary-key      CLOUDINARY_API_KEY
+#   eventflow-cloudinary-secret   CLOUDINARY_API_SECRET
+#   eventflow-smtp-host           SMTP_HOST
+#   eventflow-smtp-port           SMTP_PORT
+#   eventflow-smtp-user           SMTP_USER
+#   eventflow-smtp-pass           SMTP_PASS
+
+substitutions:
+  _REGION: us-central1
+  _AR_REPO: eventflow
+  _SERVICE_API: eventflow-api
+  _SERVICE_WORKER: eventflow-worker
+
+steps:
+  # ── 1. Install dependencies ──────────────────────────────────────────────
+  - name: node:20-alpine
+    id: install
+    entrypoint: npm
+    args: [ci]
+
+  # ── 2. Generate Prisma client ────────────────────────────────────────────
+  - name: node:20-alpine
+    id: prisma-generate
+    entrypoint: npx
+    args: [prisma, generate]
+    waitFor: [install]
+
+  # ── 3. Build TypeScript ──────────────────────────────────────────────────
+  - name: node:20-alpine
+    id: build-ts
+    entrypoint: npm
+    args: [run, build]
+    waitFor: [prisma-generate]
+
+  # ── 4. Build API Docker image ────────────────────────────────────────────
+  - name: gcr.io/cloud-builders/docker
+    id: build-api
+    args:
+      - build
+      - --target=production
+      - --tag=$_REGION-docker.pkg.dev/$PROJECT_ID/$_AR_REPO/api:$COMMIT_SHA
+      - --tag=$_REGION-docker.pkg.dev/$PROJECT_ID/$_AR_REPO/api:latest
+      - --cache-from=$_REGION-docker.pkg.dev/$PROJECT_ID/$_AR_REPO/api:latest
+      - .
+    waitFor: [build-ts]
+
+  # ── 5. Build Worker Docker image ─────────────────────────────────────────
+  - name: gcr.io/cloud-builders/docker
+    id: build-worker
+    args:
+      - build
+      - --target=worker
+      - --tag=$_REGION-docker.pkg.dev/$PROJECT_ID/$_AR_REPO/worker:$COMMIT_SHA
+      - --tag=$_REGION-docker.pkg.dev/$PROJECT_ID/$_AR_REPO/worker:latest
+      - --cache-from=$_REGION-docker.pkg.dev/$PROJECT_ID/$_AR_REPO/worker:latest
+      - .
+    waitFor: [build-ts]
+
+  # ── 6. Push API image ────────────────────────────────────────────────────
+  - name: gcr.io/cloud-builders/docker
+    id: push-api
+    args:
+      - push
+      - --all-tags
+      - $_REGION-docker.pkg.dev/$PROJECT_ID/$_AR_REPO/api
+    waitFor: [build-api]
+
+  # ── 7. Push Worker image ─────────────────────────────────────────────────
+  - name: gcr.io/cloud-builders/docker
+    id: push-worker
+    args:
+      - push
+      - --all-tags
+      - $_REGION-docker.pkg.dev/$PROJECT_ID/$_AR_REPO/worker
+    waitFor: [build-worker]
+
+  # ── 8. Deploy API to Cloud Run ───────────────────────────────────────────
+  - name: gcr.io/google.com/cloudsdktool/cloud-sdk:slim
+    id: deploy-api
+    entrypoint: gcloud
+    args:
+      - run
+      - deploy
+      - $_SERVICE_API
+      - --image=$_REGION-docker.pkg.dev/$PROJECT_ID/$_AR_REPO/api:$COMMIT_SHA
+      - --region=$_REGION
+      - --platform=managed
+      - --allow-unauthenticated
+      - --port=3000
+      - --min-instances=1
+      - --max-instances=10
+      - --memory=512Mi
+      - --cpu=1
+      - --concurrency=100
+      - --timeout=60s
+      - --set-env-vars=NODE_ENV=production,API_VERSION=v1,PORT=3000
+      - --set-env-vars=APP_URL=$_APP_URL,FRONTEND_URL=$_FRONTEND_URL
+      - --update-secrets=DATABASE_URL=eventflow-db-url:latest
+      - --update-secrets=REDIS_URL=eventflow-redis-url:latest
+      - --update-secrets=JWT_ACCESS_SECRET=eventflow-jwt-access:latest
+      - --update-secrets=JWT_REFRESH_SECRET=eventflow-jwt-refresh:latest
+      - --update-secrets=CSRF_SECRET=eventflow-csrf-secret:latest
+      - --update-secrets=GHALA_RAILS_JWT=eventflow-ghala-jwt:latest
+      - --update-secrets=GHALA_RAILS_CREDENTIAL_ID=eventflow-ghala-credential-id:latest
+      - --update-secrets=GHALA_RAILS_WEBHOOK_VERIFY_TOKEN=eventflow-ghala-webhook-token:latest
+      - --update-secrets=CLOUDINARY_CLOUD_NAME=eventflow-cloudinary-name:latest
+      - --update-secrets=CLOUDINARY_API_KEY=eventflow-cloudinary-key:latest
+      - --update-secrets=CLOUDINARY_API_SECRET=eventflow-cloudinary-secret:latest
+      - --update-secrets=SMTP_HOST=eventflow-smtp-host:latest
+      - --update-secrets=SMTP_PORT=eventflow-smtp-port:latest
+      - --update-secrets=SMTP_USER=eventflow-smtp-user:latest
+      - --update-secrets=SMTP_PASS=eventflow-smtp-pass:latest
+      - --update-secrets=GHALA_RAILS_API_URL=eventflow-ghala-api-url:latest
+    waitFor: [push-api]
+
+  # ── 9. Deploy Worker to Cloud Run ────────────────────────────────────────
+  # Worker runs as a no-traffic Cloud Run service (always-on job alternative).
+  # --min-instances=1 keeps one instance alive to drain the Redis queue.
+  - name: gcr.io/google.com/cloudsdktool/cloud-sdk:slim
+    id: deploy-worker
+    entrypoint: gcloud
+    args:
+      - run
+      - deploy
+      - $_SERVICE_WORKER
+      - --image=$_REGION-docker.pkg.dev/$PROJECT_ID/$_AR_REPO/worker:$COMMIT_SHA
+      - --region=$_REGION
+      - --platform=managed
+      - --no-allow-unauthenticated
+      - --port=3000
+      - --min-instances=1
+      - --max-instances=2
+      - --memory=512Mi
+      - --cpu=1
+      - --set-env-vars=NODE_ENV=production
+      - --update-secrets=DATABASE_URL=eventflow-db-url:latest
+      - --update-secrets=REDIS_URL=eventflow-redis-url:latest
+      - --update-secrets=GHALA_RAILS_JWT=eventflow-ghala-jwt:latest
+      - --update-secrets=GHALA_RAILS_CREDENTIAL_ID=eventflow-ghala-credential-id:latest
+      - --update-secrets=GHALA_RAILS_WEBHOOK_VERIFY_TOKEN=eventflow-ghala-webhook-token:latest
+      - --update-secrets=GHALA_RAILS_API_URL=eventflow-ghala-api-url:latest
+    waitFor: [push-worker]
+
+images:
+  - $_REGION-docker.pkg.dev/$PROJECT_ID/$_AR_REPO/api:$COMMIT_SHA
+  - $_REGION-docker.pkg.dev/$PROJECT_ID/$_AR_REPO/worker:$COMMIT_SHA
+
+options:
+  logging: CLOUD_LOGGING_ONLY
+  machineType: E2_HIGHCPU_8
+
+timeout: 1200s

@@ -7,6 +7,8 @@ import {
   bulkMessageSchema,
   scheduleCampaignSchema,
   createTemplateSchema,
+  sendInvitationSchema,
+  bulkInviteSchema,
 } from '../validators/whatsapp.validator';
 
 const router = Router();
@@ -141,7 +143,8 @@ router.use(authenticate);
  *       template that works even for first-contact messages (bypasses the 24-hour window).
  *
  *       ### What the guest receives
- *       - An image header (event poster if `coverImageUrl` is set on the event)
+ *       - An image header — uses `imageUrl` from the request body if provided, otherwise
+ *         falls back to the event's `coverImageUrl`
  *       - Personalised body: their name, event name, date, and location
  *       - Two buttons: **Thibitisha Kuja** (RSVP) and **Ona QR Code**
  *
@@ -149,9 +152,10 @@ router.use(authenticate);
  *       The RSVP and QR buttons link to your frontend app using the guest's IDs:
  *       - RSVP button → `{FRONTEND_URL}/rsvp/{guest.id}`
  *       - QR button → `{FRONTEND_URL}/qr/{guest.qrCode}`
+ *       - Accept link → `{APP_URL}/api/v1/rsvp/accept`
  *
  *       For buttons to work:
- *       1. `FRONTEND_URL` in `.env` must point to your deployed frontend (not `localhost`)
+ *       1. `FRONTEND_URL` and `APP_URL` in `.env` must point to your deployed URLs (not `localhost`)
  *       2. Your frontend must have routes `/rsvp/:guestId` and `/qr/:qrCode`
  *       3. The guest must have a `qrCode` generated — call `POST /qr/generate/{guestId}` first
  *
@@ -182,8 +186,17 @@ router.use(authenticate);
  *                 description: |
  *                   `sw` = Swahili (approved ✅ — use this)
  *                   `en` = English (check approval status before using)
+ *               imageUrl:
+ *                 type: string
+ *                 format: uri
+ *                 description: |
+ *                   Optional. Public URL of the image to show in the WhatsApp template header
+ *                   for this specific guest. Must be reachable by WhatsApp servers (no auth, no localhost).
+ *                   When omitted the event's `coverImageUrl` is used instead.
+ *                 example: "https://res.cloudinary.com/yourcloud/image/upload/v1/guests/ali-card.jpg"
  *           example:
  *             language: "sw"
+ *             imageUrl: "https://res.cloudinary.com/yourcloud/image/upload/v1/guests/ali-card.jpg"
  *     responses:
  *       202:
  *         description: Invitation sent via approved template
@@ -197,10 +210,112 @@ router.use(authenticate);
  *                 status: "QUEUED"
  *                 rsvpLink: "https://yourfrontend.com/rsvp/guest-uuid"
  *                 qrLink: "https://yourfrontend.com/qr/qr-code-uuid"
+ *                 acceptLink: "https://yourbackend.com/api/v1/rsvp/accept"
  *       400:
  *         description: Guest has no phone number
  *       404:
  *         description: Guest not found
+ *
+ * /whatsapp/bulk-invite:
+ *   post:
+ *     tags: [WhatsApp]
+ *     summary: Send invitation template to multiple guests with per-guest images
+ *     description: |
+ *       Sends the approved WhatsApp invitation template to all (or a filtered subset of) guests
+ *       for an event. Supports **per-guest custom images** so each recipient can receive their
+ *       own personalised invitation card.
+ *
+ *       ### Image resolution order (per guest)
+ *       1. `imageUrls[guestId]` — individual image for that specific guest
+ *       2. `imageUrl` — single fallback image for the whole batch
+ *       3. `event.coverImageUrl` — event cover image (existing behaviour)
+ *
+ *       ### Targeting options
+ *       - No `guestIds` or `groupId` → sends to **all guests** with a phone number
+ *       - `guestIds` array → sends only to those specific guests
+ *       - `groupId` → sends to all guests in that group who have a phone
+ *
+ *       ### Links in every message
+ *       - RSVP button → `{FRONTEND_URL}/rsvp/{guest.id}`
+ *       - QR button → `{FRONTEND_URL}/qr/{guest.qrCode}`
+ *       - Accept link (plain-text fallback) → `{APP_URL}/api/v1/rsvp/accept`
+ *
+ *       Set `FRONTEND_URL` and `APP_URL` in your `.env` to your deployed URLs.
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [eventId]
+ *             properties:
+ *               eventId:
+ *                 type: string
+ *                 format: uuid
+ *                 description: The event whose guests will receive invitations
+ *               language:
+ *                 type: string
+ *                 enum: [en, sw]
+ *                 default: sw
+ *               guestIds:
+ *                 type: array
+ *                 items:
+ *                   type: string
+ *                   format: uuid
+ *                 description: Optional — target specific guests. Leave empty to send to all.
+ *               groupId:
+ *                 type: string
+ *                 format: uuid
+ *                 description: Optional — target a specific guest group
+ *               imageUrl:
+ *                 type: string
+ *                 format: uri
+ *                 description: Optional — one image used for every guest that doesn't have an entry in `imageUrls`
+ *                 example: "https://res.cloudinary.com/yourcloud/image/upload/v1/events/poster.jpg"
+ *               imageUrls:
+ *                 type: object
+ *                 additionalProperties:
+ *                   type: string
+ *                   format: uri
+ *                 description: |
+ *                   Optional — map of `{ guestId: imageUrl }` for per-guest personalised images.
+ *                   Guests not in this map fall back to `imageUrl` then `event.coverImageUrl`.
+ *                 example:
+ *                   "guest-uuid-1": "https://res.cloudinary.com/yourcloud/image/upload/v1/guests/ali-card.jpg"
+ *                   "guest-uuid-2": "https://res.cloudinary.com/yourcloud/image/upload/v1/guests/amina-card.jpg"
+ *     responses:
+ *       202:
+ *         description: Invitations sent (template or plain-text fallback per guest)
+ *         content:
+ *           application/json:
+ *             example:
+ *               success: true
+ *               data:
+ *                 total: 3
+ *                 queued: 2
+ *                 fallback: 1
+ *                 acceptLink: "https://yourbackend.com/api/v1/rsvp/accept"
+ *                 results:
+ *                   - guestId: "guest-uuid-1"
+ *                     guestName: "Ali Hassan"
+ *                     phone: "+255712345678"
+ *                     messageId: "msg-uuid-1"
+ *                     channel: "whatsapp_template"
+ *                     status: "QUEUED"
+ *                     imageUrl: "https://res.cloudinary.com/yourcloud/image/upload/v1/guests/ali-card.jpg"
+ *                   - guestId: "guest-uuid-2"
+ *                     guestName: "Amina Juma"
+ *                     phone: "+255787654321"
+ *                     messageId: "msg-uuid-2"
+ *                     channel: "whatsapp_template"
+ *                     status: "QUEUED"
+ *                     imageUrl: "https://res.cloudinary.com/yourcloud/image/upload/v1/guests/amina-card.jpg"
+ *       400:
+ *         description: No guests with phone numbers found, or validation error
+ *       404:
+ *         description: Event not found
  *
  * /whatsapp/campaigns/schedule:
  *   post:
@@ -344,11 +459,12 @@ router.use(authenticate);
  */
 router.post('/send', validate(sendMessageSchema), whatsAppController.sendSingle);
 router.post('/bulk', validate(bulkMessageSchema), whatsAppController.sendBulk);
+router.post('/bulk-invite', validate(bulkInviteSchema), whatsAppController.sendBulkInvitations);
 router.post('/campaigns/schedule', validate(scheduleCampaignSchema), whatsAppController.scheduleCampaign);
 router.get('/campaigns/:campaignId/tracking', whatsAppController.getDeliveryTracking);
 router.get('/campaigns/event/:eventId', whatsAppController.listCampaigns);
 router.get('/templates', whatsAppController.getTemplates);
 router.post('/templates', validate(createTemplateSchema), whatsAppController.createTemplate);
-router.post('/invite/:guestId', whatsAppController.sendInvitation);
+router.post('/invite/:guestId', validate(sendInvitationSchema), whatsAppController.sendInvitation);
 
 export default router;

@@ -21,6 +21,7 @@ import whatsappExternalRoutes from '@modules/whatsapp/routes/external.routes';
 import apiKeyRoutes from '@/modules/apikey/apikey.routes';
 import analyticsRoutes from '@modules/analytics/routes/analytics.routes';
 import subscriptionRoutes from '@modules/subscription/routes/subscription.routes';
+import redirectRoutes from '@modules/redirect/redirect.routes';
 
 export function createApp(): Application {
   const app = express();
@@ -55,6 +56,11 @@ export function createApp(): Application {
   app.get('/health', (_req, res) => {
     res.json({ status: 'ok', timestamp: new Date().toISOString(), version: env.API_VERSION });
   });
+
+  // Stable redirect routes — used as WhatsApp template button base URLs.
+  // No auth, no CORS restriction — these are public links sent to guests.
+  // Change FRONTEND_URL in .env to update the destination without re-registering templates.
+  app.use('/go', redirectRoutes);
 
   // GhalaRails webhook receiver — must be before JSON body parser for raw access
   // No auth middleware: GhalaRails/Meta hits this directly

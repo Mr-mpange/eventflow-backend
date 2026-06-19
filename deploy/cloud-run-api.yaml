@@ -1,0 +1,154 @@
+# Cloud Run service definition — EventFlow API
+#
+# Apply with:
+#   gcloud run services replace deploy/cloud-run-api.yaml --region=us-central1
+#
+# Or let cloudbuild.yaml handle it automatically on every push to main.
+#
+# ⚠️  Replace every placeholder marked <REPLACE_ME> before applying manually:
+#   PROJECT_ID   → your GCP project ID  (gcloud config get-value project)
+#   REGION       → e.g. us-central1
+#   AR_REPO      → Artifact Registry repo name e.g. eventflow
+#   IMAGE_TAG    → commit SHA or "latest"
+#   APP_URL      → your Cloud Run API URL  (known after first deploy)
+#   FRONTEND_URL → your frontend URL
+
+apiVersion: serving.knative.dev/v1
+kind: Service
+metadata:
+  name: eventflow-api
+  annotations:
+    # Allow unauthenticated public traffic (guests, frontend, webhooks)
+    run.googleapis.com/ingress: all
+spec:
+  template:
+    metadata:
+      annotations:
+        # Keep at least 1 instance warm — eliminates cold-start latency
+        autoscaling.knative.dev/minScale: "1"
+        autoscaling.knative.dev/maxScale: "10"
+        # Use the second-generation execution environment (better network perf)
+        run.googleapis.com/execution-environment: gen2
+    spec:
+      containerConcurrency: 100
+      timeoutSeconds: 60
+      containers:
+        - image: us-central1-docker.pkg.dev/<PROJECT_ID>/<AR_REPO>/api:<IMAGE_TAG>
+          ports:
+            - containerPort: 3000
+          resources:
+            limits:
+              cpu: "1"
+              memory: 512Mi
+          env:
+            - name: NODE_ENV
+              value: production
+            - name: PORT
+              value: "3000"
+            - name: API_VERSION
+              value: v1
+            # ── Replace these two with your real URLs ──────────
+            - name: APP_URL
+              value: https://eventflow-api-<HASH>-uc.a.run.app
+            - name: FRONTEND_URL
+              value: https://yourfrontend.vercel.app
+            # ── Secrets pulled from Secret Manager ─────────────
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: eventflow-db-url
+                  key: latest
+            - name: REDIS_URL
+              valueFrom:
+                secretKeyRef:
+                  name: eventflow-redis-url
+                  key: latest
+            - name: JWT_ACCESS_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: eventflow-jwt-access
+                  key: latest
+            - name: JWT_REFRESH_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: eventflow-jwt-refresh
+                  key: latest
+            - name: CSRF_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: eventflow-csrf-secret
+                  key: latest
+            - name: GHALA_RAILS_API_URL
+              valueFrom:
+                secretKeyRef:
+                  name: eventflow-ghala-api-url
+                  key: latest
+            - name: GHALA_RAILS_JWT
+              valueFrom:
+                secretKeyRef:
+                  name: eventflow-ghala-jwt
+                  key: latest
+            - name: GHALA_RAILS_CREDENTIAL_ID
+              valueFrom:
+                secretKeyRef:
+                  name: eventflow-ghala-credential-id
+                  key: latest
+            - name: GHALA_RAILS_WEBHOOK_VERIFY_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: eventflow-ghala-webhook-token
+                  key: latest
+            - name: CLOUDINARY_CLOUD_NAME
+              valueFrom:
+                secretKeyRef:
+                  name: eventflow-cloudinary-name
+                  key: latest
+            - name: CLOUDINARY_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: eventflow-cloudinary-key
+                  key: latest
+            - name: CLOUDINARY_API_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: eventflow-cloudinary-secret
+                  key: latest
+            - name: SMTP_HOST
+              valueFrom:
+                secretKeyRef:
+                  name: eventflow-smtp-host
+                  key: latest
+            - name: SMTP_PORT
+              valueFrom:
+                secretKeyRef:
+                  name: eventflow-smtp-port
+                  key: latest
+            - name: SMTP_USER
+              valueFrom:
+                secretKeyRef:
+                  name: eventflow-smtp-user
+                  key: latest
+            - name: SMTP_PASS
+              valueFrom:
+                secretKeyRef:
+                  name: eventflow-smtp-pass
+                  key: latest
+          # Liveness probe — restart container if it stops responding
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 3000
+            initialDelaySeconds: 10
+            periodSeconds: 30
+            failureThreshold: 3
+          # Startup probe — give Prisma migrate time to finish on cold start
+          startupProbe:
+            httpGet:
+              path: /health
+              port: 3000
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            failureThreshold: 12
+  traffic:
+    - percent: 100
+      latestRevision: true

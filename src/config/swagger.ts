@@ -1,6 +1,8 @@
 import swaggerJsdoc from 'swagger-jsdoc';
 import { env } from './env';
 
+const PROD_URL = 'https://eventflow-backend-614505894752.us-central1.run.app';
+
 const options: swaggerJsdoc.Options = {
   definition: {
     openapi: '3.0.0',
@@ -9,6 +11,9 @@ const options: swaggerJsdoc.Options = {
       version: '1.0.0',
       description: `
 ## EventFlow — Event Invitation & WhatsApp Messaging API
+
+**Production base URL:** \`${PROD_URL}/api/v1\`
+**API Docs:** \`${PROD_URL}/api-docs\`
 
 ---
 
@@ -30,7 +35,7 @@ const options: swaggerJsdoc.Options = {
 
 ### Quick Start — Send a WhatsApp Invitation
 \`\`\`bash
-curl -X POST https://api.eventflow.app/api/v1/external/whatsapp/send/template \\
+curl -X POST ${PROD_URL}/api/v1/external/whatsapp/send/template \\
   -H "X-API-Key: ef_live_your_key_here" \\
   -H "Content-Type: application/json" \\
   -d '{
@@ -41,8 +46,8 @@ curl -X POST https://api.eventflow.app/api/v1/external/whatsapp/send/template \\
       "eventName": "Harusi ya Amina na Juma",
       "eventDate": "5 Julai 2026",
       "location": "Serena Hotel, Dar es Salaam",
-      "rsvpLink": "https://yourapp.com/rsvp/guest-uuid-here",
-      "qrLink": "https://yourapp.com/qr/guest-uuid-here",
+      "rsvpLink": "${PROD_URL}/go/rsvp/guest-uuid-here",
+      "qrLink": "${PROD_URL}/go/qr/guest-uuid-here",
       "imageUrl": "https://res.cloudinary.com/yourcloud/image/upload/event-poster.jpg"
     }
   }'
@@ -50,43 +55,68 @@ curl -X POST https://api.eventflow.app/api/v1/external/whatsapp/send/template \\
 
 ---
 
+### WhatsApp Template Button URLs
+Register your WhatsApp templates in Meta Business Manager with these **stable base URLs**.
+The \`/go/\` routes redirect guests to your frontend — change \`FRONTEND_URL\` in env any time
+without re-registering or waiting for template re-approval.
+
+| Button | Base URL to register in Meta |
+|---|---|
+| RSVP | \`${PROD_URL}/go/rsvp/\` |
+| QR Code | \`${PROD_URL}/go/qr/\` |
+| Accept Invitation | \`${PROD_URL}/go/accept/\` |
+
+Flow: guest taps button → \`${PROD_URL}/go/rsvp/{uuid}\` → 302 → \`{FRONTEND_URL}/rsvp/{uuid}\`
+
+---
+
+### Per-Guest Custom Images
+Each guest can receive their own personalised invitation image:
+
+**Single guest:**
+\`\`\`json
+POST /api/v1/whatsapp/invite/{guestId}
+{ "language": "sw", "imageUrl": "https://res.cloudinary.com/.../ali-card.jpg" }
+\`\`\`
+
+**Bulk with per-guest images:**
+\`\`\`json
+POST /api/v1/whatsapp/bulk-invite
+{
+  "eventId": "event-uuid",
+  "language": "sw",
+  "imageUrls": {
+    "guest-uuid-1": "https://res.cloudinary.com/.../ali-card.jpg",
+    "guest-uuid-2": "https://res.cloudinary.com/.../amina-card.jpg"
+  }
+}
+\`\`\`
+
+Image resolution order per guest: \`imageUrls[guestId]\` → \`imageUrl\` → \`event.coverImageUrl\`
+
+---
+
 ### ⚠️ Message shows "sent" or "queued" but customer never receives it?
 
-This is the most common issue. Here is a checklist:
-
-**1. Phone number format**
-Must be E.164 with country code — no exceptions.
+**1. Phone number format** — Must be E.164 with country code:
 - ✅ \`+255712345678\`
 - ❌ \`0712345678\` — missing country code
-- ❌ \`255712345678\` — missing leading \`+\`
 
-**2. Number must be on WhatsApp**
-This API sends **WhatsApp messages, not SMS**. If the recipient's number is not registered on WhatsApp, the message is silently rejected by Meta. There is no way to detect this before sending.
+**2. Number must be on WhatsApp** — This API sends WhatsApp messages, not SMS.
+If the number is not on WhatsApp the message is silently rejected by Meta.
 
-**3. Use the correct template name**
-Only use templates that are **approved** by Meta. Currently approved:
+**3. Use the correct template name** — Only approved templates work:
 - ✅ \`eventflow_invite_sw\` — Swahili, approved
-- ⚠️ \`eventflow_invite_en\` — English, verify approval status before using
+- ⚠️ \`eventflow_invite_en\` — English, verify approval status first
 
-**4. Free-text messages — 24-hour session window**
-\`POST /send/text\` and \`POST /whatsapp/bulk\` only work if the recipient has messaged your
-WhatsApp business number in the last 24 hours. For first-contact messages (invitations),
-always use the template endpoint.
+**4. Free-text 24-hour window** — \`POST /whatsapp/bulk\` only works if the recipient
+messaged your business number in the last 24 hours. Use \`/whatsapp/bulk-invite\` for invitations.
 
-**5. rsvpLink and qrLink must be real URLs**
-Pass the actual guest token/UUID your frontend uses.
-Placeholders like \`"test-123"\` make the buttons point to pages that don't exist.
+**5. imageUrl must be publicly accessible** — WhatsApp servers fetch it directly.
+No auth, no localhost, no expired CDN links. Use Cloudinary/S3 public URLs.
 
-**6. imageUrl must be publicly accessible**
-WhatsApp servers fetch the image directly. URLs behind authentication,
-localhost addresses, or expired CDN links will cause the message to fail.
-Options: use a Cloudinary/S3 public URL, or serve the image from your own
-deployed app via GET /api/events/{id}/whatsapp-cover (no auth required on that endpoint).
-
-**7. Status stays QUEUED forever**
-The BullMQ worker processes messages from the Redis queue.
-If the server was restarted without the worker running, messages sit in the queue and are never sent.
-Restart the server — the worker starts automatically with \`npm run dev\` or \`npm start\`.
+**6. Status stays QUEUED forever** — The BullMQ worker must be running.
+The worker service is deployed separately at \`eventflow-worker\` on Cloud Run.
 
 ---
 
@@ -99,11 +129,17 @@ QUEUED  →  SENT  →  DELIVERED  →  READ
 Use \`GET /external/whatsapp/status/{messageId}\` to poll delivery status.
 Delivery and read receipts are updated via GhalaRails webhook callbacks.
       `,
-      contact: { name: 'EventFlow Support', email: 'support@eventflow.app' },
+      contact: { name: 'EventFlow Support', email: 'support@eventflow.co' },
     },
     servers: [
-      { url: `${env.APP_URL}/api/${env.API_VERSION}`, description: 'Current Server' },
-      { url: 'https://api.eventflow.app/api/v1', description: 'Production' },
+      {
+        url: `${PROD_URL}/api/v1`,
+        description: 'Production — Google Cloud Run (us-central1)',
+      },
+      {
+        url: `${env.APP_URL}/api/${env.API_VERSION}`,
+        description: 'Current server (from APP_URL env var)',
+      },
     ],
     components: {
       securitySchemes: {
@@ -158,7 +194,7 @@ Delivery and read receipts are updated via GhalaRails webhook callbacks.
           type: 'object',
           properties: {
             id: { type: 'string', format: 'uuid' },
-            name: { type: 'string', example: 'Acme Corp Integration' },
+            name: { type: 'string', example: 'My Frontend Integration' },
             keyPrefix: { type: 'string', example: 'ef_live_a1b2' },
             permissions: {
               type: 'array',
@@ -183,35 +219,63 @@ Delivery and read receipts are updated via GhalaRails webhook callbacks.
             template: {
               type: 'string',
               enum: ['eventflow_invite_sw', 'eventflow_invite_en', 'event_invitation'],
-              description: 'Template name. Use `eventflow_invite_sw` (Swahili, approved ✅). `event_invitation` is an alias accepted by the API. Check approval status of `eventflow_invite_en` before using.',
+              description: 'Template name. Use `eventflow_invite_sw` (Swahili, approved ✅). `event_invitation` is an alias. Check approval of `eventflow_invite_en` before using.',
               example: 'eventflow_invite_sw',
             },
             params: {
               type: 'object',
               required: ['guestName', 'eventName', 'eventDate', 'location', 'imageUrl'],
               properties: {
-                guestName: { type: 'string', example: 'Ali Hassan', description: 'Guest full name — personalises the greeting' },
-                eventName: { type: 'string', example: 'Harusi ya Amina na Juma', description: 'Name of the event' },
-                eventDate: { type: 'string', example: '5 Julai 2026', description: 'Human-readable date string' },
-                location: { type: 'string', example: 'Serena Hotel, Dar es Salaam', description: 'Venue name and city' },
+                guestName: { type: 'string', example: 'Ali Hassan' },
+                eventName: { type: 'string', example: 'Harusi ya Amina na Juma' },
+                eventDate: { type: 'string', example: '5 Julai 2026' },
+                location: { type: 'string', example: 'Serena Hotel, Dar es Salaam' },
                 rsvpLink: {
                   type: 'string',
                   format: 'uri',
-                  example: 'https://yourapp.com/rsvp/guest-uuid-here',
-                  description: 'Full URL to your RSVP page. The URL suffix (after the last /) is appended to the template button base URL. Must be a real page — not a placeholder.',
+                  example: `${PROD_URL}/go/rsvp/guest-uuid-here`,
+                  description: 'Use the /go/rsvp/ redirect URL — the backend will forward the guest to your frontend.',
                 },
                 qrLink: {
                   type: 'string',
                   format: 'uri',
-                  example: 'https://yourapp.com/qr/guest-uuid-here',
-                  description: 'Full URL to the guest QR code page. Same requirement as rsvpLink.',
+                  example: `${PROD_URL}/go/qr/guest-uuid-here`,
+                  description: 'Use the /go/qr/ redirect URL — the backend will forward the guest to your frontend.',
                 },
                 imageUrl: {
                   type: 'string',
                   format: 'uri',
                   example: 'https://res.cloudinary.com/yourcloud/image/upload/event-poster.jpg',
-                  description: "Required. Publicly accessible image URL for the template IMAGE header — WhatsApp servers fetch this directly. Must be reachable without authentication. Options: (1) Cloudinary/S3 public URL, (2) your app's `/api/events/{id}/whatsapp-cover` endpoint if deployed to a public host (e.g. Render).",
+                  description: 'Required. Publicly accessible image for the WhatsApp template header. Must be reachable by WhatsApp servers without auth.',
                 },
+              },
+            },
+          },
+        },
+        BulkInviteRequest: {
+          type: 'object',
+          required: ['eventId'],
+          properties: {
+            eventId: { type: 'string', format: 'uuid' },
+            language: { type: 'string', enum: ['en', 'sw'], default: 'sw' },
+            guestIds: {
+              type: 'array',
+              items: { type: 'string', format: 'uuid' },
+              description: 'Optional — omit to send to all guests with phones',
+            },
+            groupId: { type: 'string', format: 'uuid', description: 'Optional — send to a specific group' },
+            imageUrl: {
+              type: 'string',
+              format: 'uri',
+              description: 'Single image for all guests (fallback when imageUrls not provided)',
+            },
+            imageUrls: {
+              type: 'object',
+              additionalProperties: { type: 'string', format: 'uri' },
+              description: 'Per-guest images — map of { guestId: imageUrl }. Takes priority over imageUrl.',
+              example: {
+                'guest-uuid-1': 'https://res.cloudinary.com/.../ali-card.jpg',
+                'guest-uuid-2': 'https://res.cloudinary.com/.../amina-card.jpg',
               },
             },
           },
@@ -224,10 +288,10 @@ Delivery and read receipts are updated via GhalaRails webhook callbacks.
             status: {
               type: 'string',
               enum: ['QUEUED', 'SENT', 'DELIVERED', 'READ', 'FAILED'],
-              description: 'QUEUED=accepted not yet sent | SENT=at WhatsApp | DELIVERED=on device | READ=opened | FAILED=check errorMessage',
+              description: 'QUEUED=accepted | SENT=at WhatsApp | DELIVERED=on device | READ=opened | FAILED=see errorMessage',
             },
-            externalId: { type: 'string', nullable: true, description: 'GhalaRails message ID — use this with /status/{messageId}' },
-            errorMessage: { type: 'string', nullable: true, description: 'Populated when status=FAILED — contains the reason from WhatsApp/GhalaRails' },
+            externalId: { type: 'string', nullable: true, description: 'GhalaRails message ID' },
+            errorMessage: { type: 'string', nullable: true },
             sentAt: { type: 'string', format: 'date-time', nullable: true },
             deliveredAt: { type: 'string', format: 'date-time', nullable: true },
             readAt: { type: 'string', format: 'date-time', nullable: true },
@@ -241,18 +305,23 @@ Delivery and read receipts are updated via GhalaRails webhook callbacks.
       { name: 'Auth', description: 'Authentication endpoints' },
       { name: 'Users', description: 'User management' },
       { name: 'Events', description: 'Event management' },
-      { name: 'Invitations', description: 'Invitation design' },
+      { name: 'Invitations', description: 'Invitation design & templates' },
       { name: 'Guests', description: 'Guest list management' },
-      { name: 'RSVP', description: 'RSVP responses' },
-      { name: 'QR', description: 'QR code & check-in' },
-      { name: 'WhatsApp', description: 'WhatsApp messaging (internal)' },
-      { name: 'Analytics', description: 'Event analytics' },
-      { name: 'Subscriptions', description: 'Billing & plans' },
+      { name: 'RSVP', description: 'RSVP responses (public — no auth required)' },
+      { name: 'QR', description: 'QR code generation & check-in' },
+      { name: 'Redirects', description: '🔗 Stable redirect URLs for WhatsApp template buttons — register these in Meta Business Manager' },
+      { name: 'WhatsApp', description: 'WhatsApp messaging — single, bulk plain-text, and bulk invitation template' },
+      { name: 'Analytics', description: 'Event analytics & RSVP stats' },
+      { name: 'Subscriptions', description: 'Billing & subscription plans' },
       { name: 'API Keys', description: 'Manage external developer API keys (requires JWT login)' },
-      { name: 'External WhatsApp API', description: '🔑 External API — authenticate with X-API-Key header. Send WhatsApp messages, track delivery, manage contacts.' },
+      { name: 'External WhatsApp API', description: '🔑 External API — authenticate with X-API-Key. Send templates, track delivery.' },
     ],
   },
-  apis: ['./src/modules/**/routes/*.ts', './src/modules/apikey/apikey.routes.ts'],
+  apis: [
+    './src/modules/**/routes/*.ts',
+    './src/modules/apikey/apikey.routes.ts',
+    './src/modules/redirect/redirect.routes.ts',
+  ],
 };
 
 export const swaggerSpec = swaggerJsdoc(options);

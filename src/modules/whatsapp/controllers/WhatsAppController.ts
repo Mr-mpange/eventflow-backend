@@ -2,6 +2,7 @@ import { Response, NextFunction } from 'express';
 import { WhatsAppService } from '../services/WhatsAppService';
 import { AuthRequest } from '@/middleware/auth';
 import { param } from '@/shared/utils/params';
+import type { SendInvitationDto, BulkInviteDto } from '../validators/whatsapp.validator';
 
 export class WhatsAppController {
   constructor(private readonly whatsAppService: WhatsAppService) {}
@@ -71,8 +72,21 @@ export class WhatsAppController {
 
   sendInvitation = async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
     try {
-      const lang = (req.body?.language === 'sw' ? 'sw' : 'en') as 'en' | 'sw';
-      const result = await this.whatsAppService.sendInvitation(param(req.params.guestId), req.user!.sub, lang);
+      const dto: SendInvitationDto = {
+        language: req.body?.language === 'sw' ? 'sw' : 'en',
+        imageUrl: req.body?.imageUrl ?? undefined,
+      };
+      const result = await this.whatsAppService.sendInvitation(param(req.params.guestId), req.user!.sub, dto);
+      res.status(202).json({ success: true, data: result });
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  sendBulkInvitations = async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const dto = req.body as BulkInviteDto;
+      const result = await this.whatsAppService.sendBulkInvitations(req.user!.sub, dto);
       res.status(202).json({ success: true, data: result });
     } catch (error) {
       next(error);

@@ -1,0 +1,77 @@
+# Cloud Run service definition — EventFlow WhatsApp Worker
+#
+# The worker is NOT a web server — it connects to Redis and processes BullMQ jobs.
+# Cloud Run keeps it alive with min-instances=1 so the queue is always being drained.
+# No public traffic is allowed (no-allow-unauthenticated).
+#
+# Apply with:
+#   gcloud run services replace deploy/cloud-run-worker.yaml --region=us-central1
+#
+# ⚠️  Replace PROJECT_ID, AR_REPO, and IMAGE_TAG before applying manually.
+
+apiVersion: serving.knative.dev/v1
+kind: Service
+metadata:
+  name: eventflow-worker
+  annotations:
+    # Block all external traffic — worker only talks to Redis/DB internally
+    run.googleapis.com/ingress: internal
+spec:
+  template:
+    metadata:
+      annotations:
+        # Always keep 1 instance running to drain the queue immediately
+        autoscaling.knative.dev/minScale: "1"
+        # Cap at 2 — worker is stateful (Redis consumer), don't over-scale
+        autoscaling.knative.dev/maxScale: "2"
+        run.googleapis.com/execution-environment: gen2
+    spec:
+      # Worker processes one job at a time per instance (BullMQ handles concurrency)
+      containerConcurrency: 1
+      # Long timeout — individual WhatsApp sends can take a few seconds each
+      timeoutSeconds: 300
+      containers:
+        - image: us-central1-docker.pkg.dev/<PROJECT_ID>/<AR_REPO>/worker:<IMAGE_TAG>
+          # Worker doesn't expose HTTP but Cloud Run requires a port.
+          # The Dockerfile CMD is `node dist/worker.js` which never binds a port,
+          # so Cloud Run will mark the container as "serving" after startup-probe passes.
+          ports:
+            - containerPort: 3000
+          resources:
+            limits:
+              cpu: "1"
+              memory: 512Mi
+          env:
+            - name: NODE_ENV
+              value: production
+            # ── Secrets pulled from Secret Manager ─────────────
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: eventflow-db-url
+                  key: latest
+            - name: REDIS_URL
+              valueFrom:
+                secretKeyRef:
+                  name: eventflow-redis-url
+                  key: latest
+            - name: GHALA_RAILS_API_URL
+              valueFrom:
+                secretKeyRef:
+                  name: eventflow-ghala-api-url
+                  key: latest
+            - name: GHALA_RAILS_JWT
+              valueFrom:
+                secretKeyRef:
+                  name: eventflow-ghala-jwt
+                  key: latest
+            - name: GHALA_RAILS_CREDENTIAL_ID
+              valueFrom:
+                secretKeyRef:
+                  name: eventflow-ghala-credential-id
+                  key: latest
+            - name: GHALA_RAILS_WEBHOOK_VERIFY_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: eventflow-ghala-webhook-token
+                  key: latest
