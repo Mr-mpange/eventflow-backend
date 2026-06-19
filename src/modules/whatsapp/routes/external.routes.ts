@@ -16,9 +16,13 @@ import { z } from 'zod';
 import { validate } from '@/middleware/validate';
 import { authenticateApiKey, requirePermission, ApiKeyRequest } from '@/middleware/apiKey';
 import { ghalaRailsService } from '@/infrastructure/whatsapp/GhalaRailsService';
+import { externalApiRateLimiter } from '@/middleware/rateLimiter';
 import { prisma } from '@/config/database';
 
 const router = Router();
+
+// Use the higher-capacity rate limiter for bulk sending — 2000 req / 15 min per API key
+router.use(externalApiRateLimiter);
 
 // All routes require a valid API key
 router.use(authenticateApiKey);
