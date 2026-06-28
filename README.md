@@ -10,7 +10,7 @@ Production-ready backend for the EventFlow Wedding & Event Invitation Management
 - **Cache/Queue**: Redis + BullMQ
 - **Auth**: JWT + Refresh Tokens (Argon2)
 - **Storage**: Cloudinary
-- **Messaging**: WhatsApp via GhalaRails
+- **Messaging**: WhatsApp via GhalaRails, SMS via Briq
 - **Docs**: Swagger/OpenAPI 3.0
 
 ## Getting Started
@@ -39,6 +39,7 @@ Docs: http://localhost:3000/api-docs
 | RSVP | `/rsvp` | Accept/decline/maybe responses |
 | QR | `/qr` | Generate, verify, check-in |
 | WhatsApp | `/whatsapp` | Bulk messaging, campaigns |
+| External SMS | `/external/sms` | Normal SMS sending via API key |
 | Analytics | `/analytics` | RSVP, attendance, message stats |
 | Subscriptions | `/subscriptions` | Plans, billing, invoices |
 
@@ -68,3 +69,16 @@ docker compose -f docker-compose.prod.yml up -d  # Production
 - [Database ERD](docs/ERD.md)
 - [Folder Structure](docs/FOLDER_STRUCTURE.md)
 - [Deployment Guide](docs/DEPLOYMENT.md)
+
+## SMS Configuration
+
+Configure Briq SMS before calling `POST /api/v1/external/sms/send`:
+
+```env
+BRIQ_SMS_BASE_URL=https://karibu.briq.tz
+BRIQ_SMS_SEND_PATH=/v1/message/send-instant
+BRIQ_SMS_API_KEY=your-briq-api-key
+BRIQ_SMS_SENDER_ID=BRIQ
+BRIQ_SMS_AUTH_HEADER=X-API-Key
+BRIQ_SMS_AUTH_SCHEME=
+```

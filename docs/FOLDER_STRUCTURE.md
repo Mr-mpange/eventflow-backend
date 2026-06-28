@@ -25,6 +25,8 @@ eventflow-backend/
 │   ├── infrastructure/
 │   │   ├── email/
 │   │   │   └── EmailService.ts    # Nodemailer SMTP
+│   │   ├── sms/
+│   │   │   └── BriqSmsService.ts  # Briq normal SMS client
 │   │   ├── storage/
 │   │   │   └── CloudinaryService.ts
 │   │   └── whatsapp/
@@ -83,6 +85,8 @@ eventflow-backend/
 │   │   │   ├── routes/
 │   │   │   ├── services/
 │   │   │   └── validators/
+│   │   ├── sms/
+│   │   │   └── routes/
 │   │   ├── user/
 │   │   │   ├── controllers/
 │   │   │   ├── repositories/

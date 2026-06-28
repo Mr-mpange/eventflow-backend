@@ -50,6 +50,71 @@ enum MessageStatus {
   FAILED
 }
 
+enum AgentChannel {
+  WHATSAPP
+  SMS
+  WEB
+}
+
+enum AgentIntent {
+  GREETING
+  EVENT_INFO
+  RSVP_YES
+  RSVP_NO
+  PAY_FULL
+  PAY_PARTIAL
+  CHECK_BALANCE
+  MAKE_PLEDGE
+  REQUEST_INVITE_CARD
+  REQUEST_TICKET
+  PAYMENT_STATUS
+  HUMAN_SUPPORT
+}
+
+enum AgentLanguage {
+  SW
+  EN
+}
+
+enum AgentSessionStatus {
+  ACTIVE
+  CLOSED
+}
+
+enum AgentSender {
+  USER
+  AGENT
+  SYSTEM
+}
+
+enum PaymentStatus {
+  PENDING
+  PAID
+  FAILED
+  EXPIRED
+  CANCELLED
+}
+
+enum ContributionStatus {
+  UNPAID
+  PARTIAL
+  COMPLETED
+  WAIVED
+}
+
+enum PledgeStatus {
+  ACTIVE
+  PAID
+  MISSED
+  CANCELLED
+}
+
+enum TicketStatus {
+  ACTIVE
+  USED
+  CANCELLED
+}
+
 enum SubscriptionPlan {
   FREE
   BASIC
@@ -114,6 +179,7 @@ model User {
   auditLogs         AuditLog[]
   checkIns          AttendanceLog[] @relation("CheckedInBy")
   apiKeys           ApiKey[]
+  payments          Payment[]
 
   @@index([email])
   @@index([organizationId])
@@ -241,6 +307,11 @@ model Event {
   guestGroups   GuestGroup[]
   campaigns     WhatsAppCampaign[]
   attendanceLogs AttendanceLog[]
+  contributions GuestContribution[]
+  payments      Payment[]
+  pledges       Pledge[]
+  tickets       Ticket[]
+  agentSessions AgentSession[]
 
   @@index([organizerId])
   @@index([organizationId])
@@ -337,6 +408,11 @@ model Guest {
   rsvpResponses  RsvpResponse[]
   messages       WhatsAppMessage[]
   attendanceLogs AttendanceLog[]
+  contributions  GuestContribution[]
+  payments       Payment[]
+  pledges        Pledge[]
+  tickets        Ticket[]
+  agentSessions  AgentSession[]
 
   @@index([eventId])
   @@index([groupId])
@@ -556,4 +632,154 @@ model AuditLog {
   @@index([action])
   @@index([createdAt])
   @@map("audit_logs")
+}
+
+model Payment {
+  id                String        @id @default(uuid())
+  eventId           String        @map("event_id")
+  guestId           String        @map("guest_id")
+  organizerId       String        @map("organizer_id")
+  amount            Decimal       @db.Decimal(12, 2)
+  currency          String        @default("TZS")
+  status            PaymentStatus @default(PENDING)
+  provider          String        @default("SNIPPE")
+  providerReference String?       @map("provider_reference")
+  internalReference String        @unique @map("internal_reference")
+  checkoutUrl       String?       @map("checkout_url")
+  phoneNumber       String?       @map("phone_number")
+  paymentType       String?       @map("payment_type")
+  paidAt            DateTime?     @map("paid_at")
+  failedReason      String?       @map("failed_reason")
+  metadata          Json          @default("{}")
+  createdAt         DateTime      @default(now()) @map("created_at")
+  updatedAt         DateTime      @updatedAt @map("updated_at")
+
+  event     Event @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  guest     Guest @relation(fields: [guestId], references: [id], onDelete: Cascade)
+  organizer User  @relation(fields: [organizerId], references: [id], onDelete: Cascade)
+
+  @@index([eventId])
+  @@index([guestId])
+  @@index([organizerId])
+  @@index([status])
+  @@index([providerReference])
+  @@map("payments")
+}
+
+model GuestContribution {
+  id              String             @id @default(uuid())
+  eventId         String             @map("event_id")
+  guestId         String             @map("guest_id")
+  requiredAmount  Decimal            @db.Decimal(12, 2) @map("required_amount")
+  paidAmount      Decimal            @db.Decimal(12, 2) @default(0) @map("paid_amount")
+  remainingAmount Decimal            @db.Decimal(12, 2) @map("remaining_amount")
+  status          ContributionStatus @default(UNPAID)
+  completedAt     DateTime?          @map("completed_at")
+  createdAt       DateTime           @default(now()) @map("created_at")
+  updatedAt       DateTime           @updatedAt @map("updated_at")
+
+  event Event @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  guest Guest @relation(fields: [guestId], references: [id], onDelete: Cascade)
+
+  @@unique([eventId, guestId])
+  @@index([status])
+  @@map("guest_contributions")
+}
+
+model Pledge {
+  id           String       @id @default(uuid())
+  eventId      String       @map("event_id")
+  guestId      String       @map("guest_id")
+  amount       Decimal      @db.Decimal(12, 2)
+  promisedDate DateTime     @map("promised_date")
+  status       PledgeStatus @default(ACTIVE)
+  reminderSent Boolean      @default(false) @map("reminder_sent")
+  notes        String?
+  createdAt    DateTime     @default(now()) @map("created_at")
+  updatedAt    DateTime     @updatedAt @map("updated_at")
+
+  event Event @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  guest Guest @relation(fields: [guestId], references: [id], onDelete: Cascade)
+
+  @@index([eventId])
+  @@index([guestId])
+  @@index([status, promisedDate])
+  @@map("pledges")
+}
+
+model Ticket {
+  id          String       @id @default(uuid())
+  eventId     String       @map("event_id")
+  guestId     String       @map("guest_id")
+  ticketToken String       @unique @map("ticket_token")
+  qrCodeUrl   String?      @map("qr_code_url")
+  cardUrl     String?      @map("card_url")
+  status      TicketStatus @default(ACTIVE)
+  issuedAt    DateTime?    @map("issued_at")
+  checkedInAt DateTime?    @map("checked_in_at")
+  createdAt   DateTime     @default(now()) @map("created_at")
+  updatedAt   DateTime     @updatedAt @map("updated_at")
+
+  event Event @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  guest Guest @relation(fields: [guestId], references: [id], onDelete: Cascade)
+
+  @@unique([eventId, guestId])
+  @@index([status])
+  @@map("tickets")
+}
+
+model AgentSession {
+  id            String             @id @default(uuid())
+  eventId       String             @map("event_id")
+  guestId       String             @map("guest_id")
+  channel       AgentChannel
+  currentIntent AgentIntent?       @map("current_intent")
+  currentStep   String?            @map("current_step")
+  language      AgentLanguage      @default(SW)
+  status        AgentSessionStatus @default(ACTIVE)
+  metadata      Json               @default("{}")
+  createdAt     DateTime           @default(now()) @map("created_at")
+  updatedAt     DateTime           @updatedAt @map("updated_at")
+
+  event    Event          @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  guest    Guest          @relation(fields: [guestId], references: [id], onDelete: Cascade)
+  messages AgentMessage[]
+
+  @@index([eventId])
+  @@index([guestId])
+  @@index([status])
+  @@map("agent_sessions")
+}
+
+model AgentMessage {
+  id        String      @id @default(uuid())
+  sessionId String      @map("session_id")
+  sender    AgentSender
+  message   String
+  intent    AgentIntent?
+  metadata  Json        @default("{}")
+  createdAt DateTime    @default(now()) @map("created_at")
+
+  session AgentSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@index([sessionId])
+  @@index([createdAt])
+  @@map("agent_messages")
+}
+
+model McpToolCall {
+  id        String   @id @default(uuid())
+  toolName  String   @map("tool_name")
+  requestId String?  @map("request_id")
+  actor     String?
+  success   Boolean
+  input     Json     @default("{}")
+  output    Json?    @default("{}")
+  error     String?
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([toolName])
+  @@index([requestId])
+  @@index([createdAt])
+  @@map("mcp_tool_calls")
 }

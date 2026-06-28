@@ -52,6 +52,8 @@ spec:
               value: https://eventflow-api-<HASH>-uc.a.run.app
             - name: FRONTEND_URL
               value: https://yourfrontend.vercel.app
+            - name: MCP_AUTH_MODE
+              value: bearer
             # ── Secrets pulled from Secret Manager ─────────────
             - name: DATABASE_URL
               valueFrom:
@@ -132,6 +134,81 @@ spec:
               valueFrom:
                 secretKeyRef:
                   name: eventflow-smtp-pass
+                  key: latest
+            - name: APP_PUBLIC_URL
+              valueFrom:
+                secretKeyRef:
+                  name: eventflow-app-public-url
+                  key: latest
+            - name: API_PUBLIC_URL
+              valueFrom:
+                secretKeyRef:
+                  name: eventflow-api-public-url
+                  key: latest
+            - name: MCP_BEARER_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: eventflow-mcp-bearer-token
+                  key: latest
+            - name: SNIPPE_BASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: eventflow-snippe-base-url
+                  key: latest
+            - name: SNIPPE_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: eventflow-snippe-api-key
+                  key: latest
+            - name: SNIPPE_WEBHOOK_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: eventflow-snippe-webhook
+                  key: latest
+            - name: SARUFI_BASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: eventflow-sarufi-base-url
+                  key: latest
+            - name: SARUFI_AGENT_ID
+              valueFrom:
+                secretKeyRef:
+                  name: eventflow-sarufi-agent-id
+                  key: latest
+            - name: SARUFI_WORKSPACE_ID
+              valueFrom:
+                secretKeyRef:
+                  name: eventflow-sarufi-workspace-id
+                  key: latest
+            - name: SARUFI_OAUTH_CLIENT_ID
+              valueFrom:
+                secretKeyRef:
+                  name: eventflow-sarufi-client-id
+                  key: latest
+            - name: SARUFI_OAUTH_CLIENT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: eventflow-sarufi-client-secret
+                  key: latest
+            - name: SARUFI_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: eventflow-sarufi-api-key
+                  key: latest
+            - name: SARUFI_ACCESS_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: eventflow-sarufi-access-token
+                  key: latest
+            - name: SARUFI_REFRESH_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: eventflow-sarufi-refresh-token
+                  key: latest
+            - name: SARUFI_WEBHOOK_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: eventflow-sarufi-webhook
                   key: latest
           # Liveness probe — restart container if it stops responding
           livenessProbe:

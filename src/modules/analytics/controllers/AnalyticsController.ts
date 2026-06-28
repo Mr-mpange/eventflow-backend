@@ -41,4 +41,13 @@ export class AnalyticsController {
       next(error);
     }
   };
+
+  paymentAnalytics = async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const data = await this.analyticsService.getPaymentAnalytics(param(req.params.eventId), req.user!.sub);
+      res.json({ success: true, data });
+    } catch (error) {
+      next(error);
+    }
+  };
 }

@@ -4,6 +4,7 @@ import { WhatsAppMessageRepository } from '@modules/whatsapp/repositories/WhatsA
 import { AttendanceLogRepository } from '@modules/qr/repositories/AttendanceLogRepository';
 import { NotFoundError, ForbiddenError } from '@/shared/errors/AppError';
 import { getRedis, CACHE_TTL } from '@/config/redis';
+import { prisma } from '@/config/database';
 
 export class AnalyticsService {
   constructor(
@@ -75,5 +76,55 @@ export class AnalyticsService {
   async getMessageStatistics(eventId: string, userId: string) {
     await this.assertAccess(eventId, userId);
     return this.messageRepo.getDeliveryStats(eventId);
+  }
+
+  async getPaymentAnalytics(eventId: string, userId: string) {
+    await this.assertAccess(eventId, userId);
+    return this.getPaymentAnalyticsInternal(eventId);
+  }
+
+  async getPaymentAnalyticsInternal(eventId: string) {
+    const [contributions, pledges, paidPayments, checkedInGuests, messageStats, agentConversations] = await Promise.all([
+      prisma.guestContribution.findMany({ where: { eventId } }),
+      prisma.pledge.findMany({ where: { eventId } }),
+      prisma.payment.findMany({ where: { eventId, status: 'PAID' } }),
+      prisma.guest.count({ where: { eventId, isCheckedIn: true, deletedAt: null } }),
+      prisma.whatsAppMessage.findMany({ where: { guest: { eventId } } }),
+      prisma.agentSession.count({ where: { eventId } }),
+    ]);
+
+    const targetAmount = contributions.reduce((sum, item) => sum + Number(item.requiredAmount), 0);
+    const collectedAmount = contributions.reduce((sum, item) => sum + Number(item.paidAmount), 0);
+    const remainingAmount = contributions.reduce((sum, item) => sum + Number(item.remainingAmount), 0);
+    const fullyPaidGuests = contributions.filter((item) => item.status === 'COMPLETED' || item.status === 'WAIVED').length;
+    const partialGuests = contributions.filter((item) => item.status === 'PARTIAL').length;
+    const unpaidGuests = contributions.filter((item) => item.status === 'UNPAID').length;
+    const promisedAmount = pledges
+      .filter((item) => item.status === 'ACTIVE' || item.status === 'MISSED')
+      .reduce((sum, item) => sum + Number(item.amount), 0);
+    const missedPledges = pledges.filter((item) => item.status === 'MISSED').length;
+    const invitesSent = messageStats.length;
+    const whatsappDelivered = messageStats.filter((item) => item.status === 'DELIVERED' || item.status === 'READ' || item.status === 'SENT').length;
+    const smsFallbackSent = messageStats.filter((item) => item.errorMessage?.includes('sms_fallback')).length;
+    const paymentSuccessRate = paidPayments.length > 0
+      ? Math.round((paidPayments.length / Math.max(paidPayments.length + pledges.filter((item) => item.status === 'MISSED').length, 1)) * 100)
+      : 0;
+
+    return {
+      targetAmount,
+      collectedAmount,
+      remainingAmount,
+      fullyPaidGuests,
+      partialGuests,
+      unpaidGuests,
+      promisedAmount,
+      missedPledges,
+      checkedInGuests,
+      invitesSent,
+      whatsappDelivered,
+      smsFallbackSent,
+      paymentSuccessRate,
+      agentConversations,
+    };
   }
 }

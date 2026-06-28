@@ -10,7 +10,7 @@ const options: swaggerJsdoc.Options = {
       title: 'EventFlow API',
       version: '1.0.0',
       description: `
-## EventFlow — Event Invitation & WhatsApp Messaging API
+## EventFlow — Event Invitation, WhatsApp, and SMS API
 
 **Production base URL:** \`${PROD_URL}/api/v1\`
 **API Docs:** \`${PROD_URL}/api-docs\`
@@ -22,6 +22,7 @@ const options: swaggerJsdoc.Options = {
 |---|---|
 | Internal routes (events, guests, RSVP, etc.) | \`Authorization: Bearer <JWT>\` — obtain from \`POST /auth/login\` |
 | External WhatsApp API | \`X-API-Key: ef_live_xxxx\` — generate from \`POST /api-keys\` |
+| External SMS API | \`X-API-Key: ef_live_xxxx\` — generate from \`POST /api-keys\` |
 
 ---
 
@@ -50,6 +51,17 @@ curl -X POST ${PROD_URL}/api/v1/external/whatsapp/send/template \\
       "qrLink": "${PROD_URL}/go/qr/guest-uuid-here",
       "imageUrl": "https://res.cloudinary.com/yourcloud/image/upload/event-poster.jpg"
     }
+  }'
+\`\`\`
+
+### Quick Start — Send a Normal SMS
+\`\`\`bash
+curl -X POST ${PROD_URL}/api/v1/external/sms/send \\
+  -H "X-API-Key: ef_live_your_key_here" \\
+  -H "Content-Type: application/json" \\
+  -d '{
+    "to": "+255712345678",
+    "message": "Your invitation has been confirmed. See you at 4 PM."
   }'
 \`\`\`
 

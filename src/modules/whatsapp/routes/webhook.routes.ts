@@ -2,6 +2,7 @@ import { Router, Request, Response } from 'express';
 import { ghalaRailsService } from '@/infrastructure/whatsapp/GhalaRailsService';
 import { prisma } from '@/config/database';
 import { MessageStatus } from '@prisma/client';
+import { agentService } from '@/shared/container';
 
 const router = Router();
 
@@ -72,9 +73,21 @@ router.post('/', async (req: Request, res: Response) => {
 
       // Log inbound messages (optional — for future inbox feature)
       for (const msg of value.messages ?? []) {
+        const messageText = msg.text?.body?.trim();
         console.log(
           `[Webhook] Inbound from ${msg.from}: ${msg.text?.body ?? `[${msg.type}]`}`,
         );
+
+        if (!messageText) continue;
+
+        void agentService.handleMessage({
+          message: messageText,
+          phoneNumber: msg.from,
+          channel: 'WHATSAPP',
+          sarufiAgentId: process.env.SARUFI_AGENT_ID,
+        }).catch((error) => {
+          console.error('[Webhook] Agent bridge error:', error);
+        });
       }
     }
   } catch (err) {

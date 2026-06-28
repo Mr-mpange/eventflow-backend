@@ -18,10 +18,17 @@ import qrRoutes from '@modules/qr/routes/qr.routes';
 import whatsappRoutes from '@modules/whatsapp/routes/whatsapp.routes';
 import whatsappWebhookRoutes from '@modules/whatsapp/routes/webhook.routes';
 import whatsappExternalRoutes from '@modules/whatsapp/routes/external.routes';
+import smsExternalRoutes from '@modules/sms/routes/external.routes';
 import apiKeyRoutes from '@/modules/apikey/apikey.routes';
 import analyticsRoutes from '@modules/analytics/routes/analytics.routes';
+import paymentAnalyticsRoutes from '@modules/analytics/routes/payment-analytics.routes';
 import subscriptionRoutes from '@modules/subscription/routes/subscription.routes';
 import redirectRoutes from '@modules/redirect/redirect.routes';
+import paymentRoutes from '@modules/payments/payment.routes';
+import contributionRoutes from '@modules/contributions/contribution.routes';
+import pledgeRoutes from '@modules/pledges/pledge.routes';
+import agentRoutes from '@modules/agent/agent.routes';
+import mcpRoutes from '@modules/mcp/mcp.routes';
 
 export function createApp(): Application {
   const app = express();
@@ -48,7 +55,12 @@ export function createApp(): Application {
     allowedHeaders: ['Content-Type', 'X-API-Key', 'ngrok-skip-browser-warning'],
   }));
 
-  app.use(express.json({ limit: '10mb' }));
+  app.use(express.json({
+    limit: '10mb',
+    verify: (req: express.Request & { rawBody?: string }, _res, buf) => {
+      req.rawBody = buf.toString('utf8');
+    },
+  }));
   app.use(express.urlencoded({ extended: true }));
   app.use(cookieParser());
   app.use(globalRateLimiter);
@@ -81,9 +93,16 @@ export function createApp(): Application {
   apiRouter.use('/analytics', analyticsRoutes);
   apiRouter.use('/subscriptions', subscriptionRoutes);
   apiRouter.use('/api-keys', apiKeyRoutes);
+  apiRouter.use('/', paymentRoutes);
+  apiRouter.use('/', contributionRoutes);
+  apiRouter.use('/', pledgeRoutes);
+  apiRouter.use('/', agentRoutes);
+  apiRouter.use('/mcp', mcpRoutes);
+  apiRouter.use('/', paymentAnalyticsRoutes);
 
   // External developer API — authenticated via X-API-Key header
   apiRouter.use('/external/whatsapp', whatsappExternalRoutes);
+  apiRouter.use('/external/sms', smsExternalRoutes);
 
   app.use(`/api/${env.API_VERSION}`, apiRouter);
 

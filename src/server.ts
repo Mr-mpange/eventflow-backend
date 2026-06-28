@@ -4,6 +4,7 @@ import { env } from '@/config/env';
 import { connectDatabase, disconnectDatabase } from '@/config/database';
 import { connectRedis, disconnectRedis } from '@/config/redis';
 import { createWhatsAppWorker } from '@/jobs/whatsapp.processor';
+import { createAutomationWorker } from '@/jobs/automation.processor';
 
 async function bootstrap(): Promise<void> {
   await connectDatabase();
@@ -13,7 +14,9 @@ async function bootstrap(): Promise<void> {
 
   // Start the WhatsApp message queue worker
   const whatsappWorker = createWhatsAppWorker();
+  const automationWorker = createAutomationWorker();
   console.log('[Worker] WhatsApp message processor started');
+  console.log('[Worker] Automation processor started');
 
   const server = app.listen(env.PORT, () => {
     console.log(`EventFlow API running on port ${env.PORT} [${env.NODE_ENV}]`);
@@ -23,6 +26,7 @@ async function bootstrap(): Promise<void> {
   const shutdown = async (signal: string) => {
     console.log(`${signal} received, shutting down gracefully`);
     await whatsappWorker.close();
+    await automationWorker.close();
     server.close(async () => {
       await disconnectDatabase();
       await disconnectRedis();

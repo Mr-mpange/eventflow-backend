@@ -44,6 +44,62 @@ openssl rand -hex 32
 
 ## Production Deployment
 
+### Google Cloud Run / Cloud Build
+
+This repository is already structured for Google Cloud deployment:
+- `cloudbuild.yaml` builds and deploys `eventflow-api` and `eventflow-worker`
+- `deploy/cloud-run-api.yaml` defines the API service
+- `deploy/cloud-run-worker.yaml` defines the worker service
+
+Required Secret Manager secrets for the new payment-agent flow:
+
+| Secret name | Env var |
+|----------|-------------|
+| `eventflow-app-public-url` | `APP_PUBLIC_URL` |
+| `eventflow-api-public-url` | `API_PUBLIC_URL` |
+| `eventflow-mcp-bearer-token` | `MCP_BEARER_TOKEN` |
+| `eventflow-snippe-base-url` | `SNIPPE_BASE_URL` |
+| `eventflow-snippe-api-key` | `SNIPPE_API_KEY` |
+| `eventflow-snippe-webhook` | `SNIPPE_WEBHOOK_SECRET` |
+| `eventflow-sarufi-base-url` | `SARUFI_BASE_URL` |
+| `eventflow-sarufi-agent-id` | `SARUFI_AGENT_ID` |
+| `eventflow-sarufi-workspace-id` | `SARUFI_WORKSPACE_ID` |
+| `eventflow-sarufi-client-id` | `SARUFI_OAUTH_CLIENT_ID` |
+| `eventflow-sarufi-client-secret` | `SARUFI_OAUTH_CLIENT_SECRET` |
+| `eventflow-sarufi-api-key` | `SARUFI_API_KEY` |
+| `eventflow-sarufi-access-token` | `SARUFI_ACCESS_TOKEN` |
+| `eventflow-sarufi-refresh-token` | `SARUFI_REFRESH_TOKEN` |
+| `eventflow-sarufi-webhook` | `SARUFI_WEBHOOK_SECRET` |
+
+Non-secret runtime setting used in Cloud Run:
+- `MCP_AUTH_MODE=bearer`
+
+Create or update the new secrets in Google Cloud:
+
+```bash
+printf '%s' 'https://your-public-api.example.com' | gcloud secrets create eventflow-api-public-url --data-file=-
+printf '%s' 'https://your-public-app.example.com' | gcloud secrets create eventflow-app-public-url --data-file=-
+printf '%s' 'your-mcp-bearer-token' | gcloud secrets create eventflow-mcp-bearer-token --data-file=-
+printf '%s' 'https://api.sarufi.io' | gcloud secrets create eventflow-sarufi-base-url --data-file=-
+printf '%s' 'sarufi-agent-id' | gcloud secrets create eventflow-sarufi-agent-id --data-file=-
+printf '%s' 'sarufi-workspace-id' | gcloud secrets create eventflow-sarufi-workspace-id --data-file=-
+printf '%s' 'oauth-client-id' | gcloud secrets create eventflow-sarufi-client-id --data-file=-
+printf '%s' 'oauth-client-secret' | gcloud secrets create eventflow-sarufi-client-secret --data-file=-
+printf '%s' 'sarufi-api-key' | gcloud secrets create eventflow-sarufi-api-key --data-file=-
+printf '%s' 'access-token' | gcloud secrets create eventflow-sarufi-access-token --data-file=-
+printf '%s' 'refresh-token' | gcloud secrets create eventflow-sarufi-refresh-token --data-file=-
+printf '%s' 'sarufi-webhook-secret' | gcloud secrets create eventflow-sarufi-webhook --data-file=-
+printf '%s' 'https://snippe.example.com' | gcloud secrets create eventflow-snippe-base-url --data-file=-
+printf '%s' 'snippe-api-key' | gcloud secrets create eventflow-snippe-api-key --data-file=-
+printf '%s' 'snippe-webhook-secret' | gcloud secrets create eventflow-snippe-webhook --data-file=-
+```
+
+If a secret already exists, add a new version instead:
+
+```bash
+printf '%s' 'new-value' | gcloud secrets versions add eventflow-sarufi-access-token --data-file=-
+```
+
 ### Option 1: Docker Compose (Single Server)
 
 ```bash

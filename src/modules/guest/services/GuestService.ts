@@ -3,6 +3,7 @@ import QRCode from 'qrcode';
 import { GuestRepository } from '../repositories/GuestRepository';
 import { GuestGroupRepository } from '../repositories/GuestGroupRepository';
 import { EventRepository } from '@modules/event/repositories/EventRepository';
+import { ContributionService } from '@modules/contributions/contribution.service';
 import { NotFoundError, ForbiddenError } from '@/shared/errors/AppError';
 import { auditService } from '@/shared/services/AuditService';
 import { paginatedResponse } from '@/shared/utils/helpers';
@@ -15,6 +16,7 @@ export class GuestService {
     private readonly guestRepo: GuestRepository,
     private readonly groupRepo: GuestGroupRepository,
     private readonly eventRepo: EventRepository,
+    private readonly contributionService: ContributionService,
   ) {}
 
   private async assertEventAccess(eventId: string, userId: string) {
@@ -45,6 +47,7 @@ export class GuestService {
 
     const qr = await this.generateQrForGuest(guest.id, dto.eventId);
     const updated = await this.guestRepo.update(guest.id, qr);
+    await this.contributionService.ensureForGuest(dto.eventId, guest.id);
 
     await auditService.log('CREATE', 'Guest', guest.id, { userId });
     return updated;
@@ -90,6 +93,8 @@ export class GuestService {
     }));
 
     const count = await this.guestRepo.createMany(guestsData);
+    const createdGuests = await this.guestRepo.findByEvent(eventId, 1, Math.max(count, 1));
+    await Promise.all(createdGuests.data.map((guest) => this.contributionService.ensureForGuest(eventId, guest.id)));
     await auditService.log('IMPORT', 'Guest', eventId, { userId }, undefined, { count });
     return { imported: count };
   }

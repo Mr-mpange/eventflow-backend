@@ -47,3 +47,31 @@ export const authRateLimiter = rateLimit({
     },
   },
 });
+
+export const agentRateLimiter = rateLimit({
+  windowMs: 5 * 60 * 1000,
+  max: 300,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: {
+    success: false,
+    error: {
+      code: 'RATE_LIMIT_EXCEEDED',
+      message: 'Too many agent or MCP requests',
+    },
+  },
+});
+
+export const webhookRateLimiter = rateLimit({
+  windowMs: 5 * 60 * 1000,
+  max: 600,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: {
+    success: false,
+    error: {
+      code: 'RATE_LIMIT_EXCEEDED',
+      message: 'Too many webhook requests',
+    },
+  },
+});

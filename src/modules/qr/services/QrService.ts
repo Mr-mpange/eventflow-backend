@@ -2,6 +2,7 @@ import QRCode from 'qrcode';
 import { v4 as uuidv4 } from 'uuid';
 import { GuestRepository } from '@modules/guest/repositories/GuestRepository';
 import { AttendanceLogRepository } from '../repositories/AttendanceLogRepository';
+import { TicketRepository } from '../repositories/TicketRepository';
 import { EventRepository } from '@modules/event/repositories/EventRepository';
 import { NotFoundError, ForbiddenError, ValidationError } from '@/shared/errors/AppError';
 import { auditService } from '@/shared/services/AuditService';
@@ -13,6 +14,7 @@ export class QrService {
     private readonly guestRepo: GuestRepository,
     private readonly attendanceRepo: AttendanceLogRepository,
     private readonly eventRepo: EventRepository,
+    private readonly ticketRepo: TicketRepository,
   ) {}
 
   private normalizeQrCode(input: string) {
@@ -36,7 +38,32 @@ export class QrService {
   }
 
   async verify(qrCode: string) {
-    const guest = await this.guestRepo.findByQrCode(this.normalizeQrCode(qrCode));
+    const normalized = this.normalizeQrCode(qrCode);
+    const ticket = await this.ticketRepo.findByToken(normalized);
+    if (ticket) {
+      return {
+        valid: ticket.status === 'ACTIVE',
+        ticket: {
+          id: ticket.id,
+          status: ticket.status,
+          issuedAt: ticket.issuedAt,
+          checkedInAt: ticket.checkedInAt,
+        },
+        guest: {
+          id: ticket.guest.id,
+          fullName: ticket.guest.fullName,
+          rsvpStatus: ticket.guest.rsvpStatus,
+          isCheckedIn: ticket.guest.isCheckedIn,
+        },
+        event: {
+          id: ticket.event.id,
+          title: ticket.event.title,
+          eventDate: ticket.event.eventDate,
+        },
+      };
+    }
+
+    const guest = await this.guestRepo.findByQrCode(normalized);
     if (!guest) throw new NotFoundError('Guest');
 
     const event = await this.eventRepo.findById(guest.eventId);
@@ -58,8 +85,13 @@ export class QrService {
   }
 
   async checkIn(qrCode: string, staffUserId: string, notes?: string) {
-    const guest = await this.guestRepo.findByQrCode(this.normalizeQrCode(qrCode));
+    const normalized = this.normalizeQrCode(qrCode);
+    const ticket = await this.ticketRepo.findByToken(normalized);
+    const guest = ticket
+      ? await this.guestRepo.findById(ticket.guestId)
+      : await this.guestRepo.findByQrCode(normalized);
     if (!guest) throw new NotFoundError('Guest');
+    if (ticket && ticket.status !== 'ACTIVE') throw new ValidationError('Ticket is not active');
 
     const event = await this.eventRepo.findById(guest.eventId);
     if (!event) throw new NotFoundError('Event', guest.eventId);
@@ -86,6 +118,12 @@ export class QrService {
       isCheckedIn: true,
       checkedInAt: new Date(),
     });
+    if (ticket) {
+      await this.ticketRepo.update(ticket.id, {
+        status: 'USED',
+        checkedInAt: new Date(),
+      });
+    }
 
     await auditService.log('CHECK_IN', 'Guest', guest.id, { userId: staffUserId });
 

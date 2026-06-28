@@ -116,8 +116,10 @@ Entities with `deletedAt` use soft deletion. Repositories filter `deletedAt: nul
 ### 4. Audit Logging
 All mutating operations write to `audit_logs` via `AuditService`. Captures user, action, entity, and before/after values.
 
-### 5. Queue-Based Messaging
-WhatsApp messages are never sent synchronously. All messages go through BullMQ with retry logic (3 attempts, exponential backoff).
+### 5. Messaging Architecture
+- WhatsApp messages are asynchronous and go through BullMQ with retry logic (3 attempts, exponential backoff).
+- Normal SMS sends use the external Briq provider through a dedicated infrastructure client.
+- External messaging channels are exposed behind API-key-authenticated routes under `/api/v1/external/*`.
 
 ### 6. JWT + Refresh Token Rotation
 - Access tokens: 15 minutes, stateless

@@ -31,6 +31,21 @@
 #   eventflow-smtp-port           SMTP_PORT
 #   eventflow-smtp-user           SMTP_USER
 #   eventflow-smtp-pass           SMTP_PASS
+#   eventflow-app-public-url      APP_PUBLIC_URL
+#   eventflow-api-public-url      API_PUBLIC_URL
+#   eventflow-mcp-bearer-token    MCP_BEARER_TOKEN
+#   eventflow-snippe-base-url     SNIPPE_BASE_URL
+#   eventflow-snippe-api-key      SNIPPE_API_KEY
+#   eventflow-snippe-webhook      SNIPPE_WEBHOOK_SECRET
+#   eventflow-sarufi-base-url     SARUFI_BASE_URL
+#   eventflow-sarufi-agent-id     SARUFI_AGENT_ID
+#   eventflow-sarufi-workspace-id SARUFI_WORKSPACE_ID
+#   eventflow-sarufi-client-id    SARUFI_OAUTH_CLIENT_ID
+#   eventflow-sarufi-client-secret SARUFI_OAUTH_CLIENT_SECRET
+#   eventflow-sarufi-api-key      SARUFI_API_KEY
+#   eventflow-sarufi-access-token SARUFI_ACCESS_TOKEN
+#   eventflow-sarufi-refresh-token SARUFI_REFRESH_TOKEN
+#   eventflow-sarufi-webhook      SARUFI_WEBHOOK_SECRET
 
 substitutions:
   _REGION: us-central1
@@ -121,7 +136,7 @@ steps:
       - --concurrency=100
       - --timeout=60s
       - --set-env-vars=NODE_ENV=production,API_VERSION=v1,PORT=3000
-      - --set-env-vars=APP_URL=$_APP_URL,FRONTEND_URL=$_FRONTEND_URL
+      - --set-env-vars=APP_URL=$_APP_URL,FRONTEND_URL=$_FRONTEND_URL,MCP_AUTH_MODE=bearer
       - --update-secrets=DATABASE_URL=eventflow-db-url:latest
       - --update-secrets=REDIS_URL=eventflow-redis-url:latest
       - --update-secrets=JWT_ACCESS_SECRET=eventflow-jwt-access:latest
@@ -138,6 +153,21 @@ steps:
       - --update-secrets=SMTP_USER=eventflow-smtp-user:latest
       - --update-secrets=SMTP_PASS=eventflow-smtp-pass:latest
       - --update-secrets=GHALA_RAILS_API_URL=eventflow-ghala-api-url:latest
+      - --update-secrets=APP_PUBLIC_URL=eventflow-app-public-url:latest
+      - --update-secrets=API_PUBLIC_URL=eventflow-api-public-url:latest
+      - --update-secrets=MCP_BEARER_TOKEN=eventflow-mcp-bearer-token:latest
+      - --update-secrets=SNIPPE_BASE_URL=eventflow-snippe-base-url:latest
+      - --update-secrets=SNIPPE_API_KEY=eventflow-snippe-api-key:latest
+      - --update-secrets=SNIPPE_WEBHOOK_SECRET=eventflow-snippe-webhook:latest
+      - --update-secrets=SARUFI_BASE_URL=eventflow-sarufi-base-url:latest
+      - --update-secrets=SARUFI_AGENT_ID=eventflow-sarufi-agent-id:latest
+      - --update-secrets=SARUFI_WORKSPACE_ID=eventflow-sarufi-workspace-id:latest
+      - --update-secrets=SARUFI_OAUTH_CLIENT_ID=eventflow-sarufi-client-id:latest
+      - --update-secrets=SARUFI_OAUTH_CLIENT_SECRET=eventflow-sarufi-client-secret:latest
+      - --update-secrets=SARUFI_API_KEY=eventflow-sarufi-api-key:latest
+      - --update-secrets=SARUFI_ACCESS_TOKEN=eventflow-sarufi-access-token:latest
+      - --update-secrets=SARUFI_REFRESH_TOKEN=eventflow-sarufi-refresh-token:latest
+      - --update-secrets=SARUFI_WEBHOOK_SECRET=eventflow-sarufi-webhook:latest
     waitFor: [push-api]
 
   # ── 9. Deploy Worker to Cloud Run ────────────────────────────────────────
@@ -159,13 +189,27 @@ steps:
       - --max-instances=2
       - --memory=512Mi
       - --cpu=1
-      - --set-env-vars=NODE_ENV=production
+      - --set-env-vars=NODE_ENV=production,MCP_AUTH_MODE=bearer
       - --update-secrets=DATABASE_URL=eventflow-db-url:latest
       - --update-secrets=REDIS_URL=eventflow-redis-url:latest
       - --update-secrets=GHALA_RAILS_JWT=eventflow-ghala-jwt:latest
       - --update-secrets=GHALA_RAILS_CREDENTIAL_ID=eventflow-ghala-credential-id:latest
       - --update-secrets=GHALA_RAILS_WEBHOOK_VERIFY_TOKEN=eventflow-ghala-webhook-token:latest
       - --update-secrets=GHALA_RAILS_API_URL=eventflow-ghala-api-url:latest
+      - --update-secrets=APP_PUBLIC_URL=eventflow-app-public-url:latest
+      - --update-secrets=API_PUBLIC_URL=eventflow-api-public-url:latest
+      - --update-secrets=SNIPPE_BASE_URL=eventflow-snippe-base-url:latest
+      - --update-secrets=SNIPPE_API_KEY=eventflow-snippe-api-key:latest
+      - --update-secrets=SNIPPE_WEBHOOK_SECRET=eventflow-snippe-webhook:latest
+      - --update-secrets=SARUFI_BASE_URL=eventflow-sarufi-base-url:latest
+      - --update-secrets=SARUFI_AGENT_ID=eventflow-sarufi-agent-id:latest
+      - --update-secrets=SARUFI_WORKSPACE_ID=eventflow-sarufi-workspace-id:latest
+      - --update-secrets=SARUFI_OAUTH_CLIENT_ID=eventflow-sarufi-client-id:latest
+      - --update-secrets=SARUFI_OAUTH_CLIENT_SECRET=eventflow-sarufi-client-secret:latest
+      - --update-secrets=SARUFI_API_KEY=eventflow-sarufi-api-key:latest
+      - --update-secrets=SARUFI_ACCESS_TOKEN=eventflow-sarufi-access-token:latest
+      - --update-secrets=SARUFI_REFRESH_TOKEN=eventflow-sarufi-refresh-token:latest
+      - --update-secrets=SARUFI_WEBHOOK_SECRET=eventflow-sarufi-webhook:latest
     waitFor: [push-worker]
 
 images:

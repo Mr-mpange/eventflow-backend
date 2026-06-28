@@ -32,6 +32,19 @@ export class EventRepository {
     return { data, total, page, limit };
   }
 
+  async findByCode(code: string): Promise<Event | null> {
+    return prisma.event.findFirst({
+      where: {
+        deletedAt: null,
+        OR: [
+          { id: code },
+          { settings: { path: ['eventCode'], equals: code } },
+        ],
+      },
+      include: { category: true, organizer: { select: { id: true, firstName: true, lastName: true, email: true } } },
+    });
+  }
+
   async create(data: Prisma.EventCreateInput): Promise<Event> {
     return prisma.event.create({ data, include: { category: true } });
   }

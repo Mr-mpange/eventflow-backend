@@ -17,6 +17,25 @@ export class GuestRepository {
     });
   }
 
+  async findByPhoneAndEvent(phone: string, eventId: string): Promise<Guest | null> {
+    return prisma.guest.findFirst({
+      where: {
+        eventId,
+        deletedAt: null,
+        phone,
+      },
+      include: { event: true, group: true },
+    });
+  }
+
+  async findByPhone(phone: string): Promise<Guest | null> {
+    return prisma.guest.findFirst({
+      where: { phone, deletedAt: null },
+      include: { event: true, group: true },
+      orderBy: { createdAt: 'desc' },
+    });
+  }
+
   async findByEvent(eventId: string, page = 1, limit = 50, search?: string, groupId?: string, rsvpStatus?: RsvpStatus) {
     const { skip, take } = paginate(page, limit);
     const where: Prisma.GuestWhereInput = {

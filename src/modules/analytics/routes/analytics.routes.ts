@@ -76,5 +76,6 @@ router.get('/event/:eventId', analyticsController.eventAnalytics);
 router.get('/rsvp/:eventId', analyticsController.rsvpStats);
 router.get('/attendance/:eventId', analyticsController.attendanceStats);
 router.get('/messages/:eventId', analyticsController.messageStats);
+router.get('/events/:eventId/payment-analytics', analyticsController.paymentAnalytics);
 
 export default router;
