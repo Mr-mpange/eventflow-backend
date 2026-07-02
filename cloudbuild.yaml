@@ -135,7 +135,7 @@ steps:
       - --cpu=1
       - --concurrency=100
       - --timeout=60s
-      - --set-env-vars=NODE_ENV=production,API_VERSION=v1,PORT=3000
+      - --set-env-vars=NODE_ENV=production,API_VERSION=v1
       - --set-env-vars=APP_URL=$_APP_URL,FRONTEND_URL=$_FRONTEND_URL,MCP_AUTH_MODE=bearer
       - --update-secrets=DATABASE_URL=eventflow-db-url:latest
       - --update-secrets=REDIS_URL=eventflow-redis-url:latest

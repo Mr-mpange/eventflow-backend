@@ -39,7 +39,7 @@ export class EventService {
 
   async findById(eventId: string, userId: string) {
     const redis = getRedis();
-    const cacheKey = `event:${eventId}`;
+    const cacheKey = `event:${eventId}:user:${userId}`;
     const cached = await redis.get(cacheKey);
     if (cached) return JSON.parse(cached);
 
@@ -75,7 +75,7 @@ export class EventService {
     };
     const updated = await this.eventRepo.update(eventId, updateData);
 
-    await getRedis().del(`event:${eventId}`);
+    await getRedis().del(`event:${eventId}:user:${userId}`);
     await auditService.log('UPDATE', 'Event', eventId, { userId }, { title: event.title }, dto as Record<string, unknown>);
     return updated;
   }
@@ -86,7 +86,7 @@ export class EventService {
     if (event.organizerId !== userId) throw new ForbiddenError('Access denied');
 
     await this.eventRepo.softDelete(eventId);
-    await getRedis().del(`event:${eventId}`);
+    await getRedis().del(`event:${eventId}:user:${userId}`);
     await auditService.log('DELETE', 'Event', eventId, { userId });
   }
 
@@ -97,7 +97,7 @@ export class EventService {
 
     const result = await cloudinaryService.uploadImage(buffer, `events/${eventId}`, 'cover');
     const updated = await this.eventRepo.update(eventId, { coverImageUrl: result.url });
-    await getRedis().del(`event:${eventId}`);
+    await getRedis().del(`event:${eventId}:user:${userId}`);
     return updated;
   }
 
@@ -116,7 +116,7 @@ export class EventService {
     if (event.organizerId !== userId) throw new ForbiddenError('Access denied');
 
     const updated = await this.eventRepo.update(eventId, { settings: settings as Prisma.InputJsonValue });
-    await getRedis().del(`event:${eventId}`);
+    await getRedis().del(`event:${eventId}:user:${userId}`);
     return updated.settings;
   }
 }
